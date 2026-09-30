@@ -22,7 +22,7 @@ public enum AttentionKind: String, Codable {
     case notification
     /// Stopped with Esc or a declined tool; the agent waits for what to do instead.
     case interrupted
-    /// Claude's AskUserQuestion prompt, which holds the turn until you pick an answer.
+    /// A structured question prompt. Codex's asynchronous input tool can leave one open while the turn works.
     case choice
 }
 

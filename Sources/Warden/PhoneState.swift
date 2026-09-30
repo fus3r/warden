@@ -128,6 +128,7 @@ struct PhoneState: Codable, Equatable {
             default: return session.detail ?? "Needs your input"
             }
         case .working:
+            if session.attention == .choice { return "Working, question pending" }
             if let resumes = session.resumesAt { return "Usage limit, resumes \(MenuFormat.resetPhrase(resumes, now: now))" }
             if let retry = session.retry, now.timeIntervalSince(retry.at) < 600 {
                 return "\(retry.networkDown ? "Offline, retrying" : "Retrying after an error") (\(retry.attempt) of \(retry.maxAttempts))"

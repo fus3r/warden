@@ -17,7 +17,8 @@ public enum TelemetryParser {
         var sawMetadata = false
         var lastAssistant = ""
         /// A question Codex asked with its input tool. Codex acknowledges the call at once and keeps working; the
-        /// question stays open until you send a message, the turn is stopped, or a new turn starts.
+        /// question stays open until you send a message, the turn is stopped, or a new turn starts. Only a turn that
+        /// ends with the question unanswered needs attention; the active turn still works.
         var openQuestion: String?
         /// Whether the lines read hold a turn's start or end. A turn longer than the tail read shows only its
         /// token counts.
@@ -67,13 +68,13 @@ public enum TelemetryParser {
                         if !parts.isEmpty { lastAssistant = parts.joined(separator: "\n") }
                     }
                 case "function_call" where payload["name"] as? String == "request_user_input_async":
-                    // Codex asks and goes on working; the question waits for your answer.
+                    // This input tool is nonblocking: keep the question visible without reporting a stopped turn.
                     let arguments = (payload["arguments"] as? String).flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) }
                     let first = ((arguments as? [String: Any])?["questions"] as? [[String: Any]])?.first
                     let question = (first?["title"] as? String ?? first?["question"] as? String ?? "")
                         .split(whereSeparator: \.isWhitespace).joined(separator: " ")
                     openQuestion = String(question.prefix(200))
-                    session.phase = .needsAttention
+                    session.phase = .working
                     session.attention = .choice
                     session.detail = question.isEmpty ? nil : openQuestion
                 case "message" where payload["role"] as? String == "user" && openQuestion != nil:

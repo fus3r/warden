@@ -311,15 +311,24 @@ final class TelemetryParserTests: XCTestCase {
         let commentary = #"{"timestamp":"2026-09-23T19:01:10.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Meanwhile I checked the build."}],"phase":"commentary"}}"#
         let answered = #"{"timestamp":"2026-09-23T19:04:00.000Z","ordinal":31,"type":"response_item","payload":{"type":"message","id":"msg_9","role":"user","content":[{"type":"input_text","text":"Yes, keep them"}]}}"#
         let completed = #"{"timestamp":"2026-09-23T19:15:00.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"r2","last_agent_message":"The build passes. I asked about the snapshots above."}}"#
-        let waiting = try codex([meta, started, asked, acknowledged, counted, commentary])
-        XCTAssertEqual(waiting.phase, .needsAttention)
-        XCTAssertEqual(waiting.attention, .choice)
-        XCTAssertEqual(waiting.detail, "Keep the old snapshots?")
+        let working = try codex([meta, started, asked, acknowledged, counted, commentary])
+        XCTAssertEqual(working.phase, .working)
+        XCTAssertEqual(working.attention, .choice)
+        XCTAssertEqual(working.detail, "Keep the old snapshots?")
+        // A real blocking prompt from the daemon still takes precedence over the asynchronous question.
+        let blocked = try XCTUnwrap(CodexApprovals.applying([working.id: .init(kind: .permission, detail: "pnpm build")],
+                                                          to: [working]).first)
+        XCTAssertEqual(blocked.phase, .needsAttention)
+        XCTAssertEqual(blocked.attention, .permission)
         // The turn can end first; the question still waits.
         let ended = try codex([meta, started, asked, acknowledged, counted, commentary, completed])
+        XCTAssertEqual(ended.phase, .needsAttention)
         XCTAssertEqual(ended.attention, .choice)
         XCTAssertEqual(ended.detail, "Keep the old snapshots?")
-        XCTAssertEqual(try codex([meta, started, asked, acknowledged, counted, answered]).phase, .working)
+        let resumed = try codex([meta, started, asked, acknowledged, counted, answered])
+        XCTAssertEqual(resumed.phase, .working)
+        XCTAssertNil(resumed.attention)
+        XCTAssertNil(resumed.detail)
         XCTAssertEqual(try codex([meta, started, asked, acknowledged, answered, completed]).phase, .finished)
 
         let failed = #"{"timestamp":"2026-09-23T19:10:00.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"r2","last_agent_message":null,"error":{"codex_error_info":"server_overloaded","message":"We're currently experiencing high demand."}}}"#

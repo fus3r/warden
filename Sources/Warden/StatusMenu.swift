@@ -515,7 +515,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             default: parts.append(session.detail ?? "Needs your input")
             }
         case .working:
-            if let resumes = session.resumesAt {
+            if session.attention == .choice {
+                parts.append("Working, question pending")
+            } else if let resumes = session.resumesAt {
                 parts.append("Usage limit, resumes \(MenuFormat.resetPhrase(resumes))")
             } else if let retry = session.retry, Date().timeIntervalSince(retry.at) < 600 {
                 parts.append("\(retry.networkDown ? "Offline, retrying" : "Retrying after an error") (\(retry.attempt) of \(retry.maxAttempts))")
@@ -590,6 +592,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     private func tooltip(for session: AgentSession) -> String {
         var lines: [String] = []
+        let agent = session.provider == .claude ? "Claude Code" : "Codex"
         if let title = session.title { lines.append(title) }
         let host = SessionNavigator.hostName(SessionNavigator.hostBundleID(for: session, processes: store.processes))
         lines.append(["\(session.provider.rawValue)\(host.map { " in \($0)" } ?? "")", session.model]
@@ -611,15 +614,19 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             lines.append("Limits so far in their current windows: \(shares.joined(separator: ", ")), estimated from limit rises")
         }
         switch session.phaseEvidence {
-        case .provider: lines.append("State from Claude Code hooks")
+        case .provider: lines.append("State reported by \(agent)")
         case .localLog: lines.append("State from the local session log")
         case .inferred: lines.append("State inferred from process activity")
         }
         if session.attention == .question || session.attention == .choice {
             // The subtitle often cuts the question short.
             if let question = session.detail { lines.append("Asks: \(question)") }
-            lines.append(session.attention == .choice ? "Claude Code waits for your answer to its question."
-                         : "A final question is detected by a heuristic.")
+            if session.attention == .choice {
+                lines.append(session.phase == .working ? "\(agent) keeps working while this question is open."
+                             : "\(agent) waits for your answer to its question.")
+            } else {
+                lines.append("A final question is detected by a heuristic.")
+            }
         }
         if let retry = session.retry, session.phase == .working, Date().timeIntervalSince(retry.at) < 600 {
             lines.append("\(retry.networkDown ? "Claude Code cannot reach its API" : "A request failed"), and it retries by itself: attempt \(retry.attempt) of \(retry.maxAttempts), at \(MenuFormat.time(retry.at)).")
