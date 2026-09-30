@@ -1,0 +1,37 @@
+{
+  "name": "warden-terminal",
+  "displayName": "Warden Terminal Focus",
+  "description": "Bring forward the VS Code terminal selected in Warden.",
+  "version": "0.1.2",
+  "publisher": "fus3r",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.110.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "main": "./extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": {
+      "supported": false
+    }
+  },
+  "scripts": {
+    "test": "node --test extension.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fus3r/warden.git",
+    "directory": "Extensions/warden-terminal"
+  }
+}

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>Warden</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.fus3r.Warden</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Warden</string>
+	<key>CFBundleDisplayName</key>
+	<string>Warden</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.4.0</string>
+	<key>CFBundleVersion</key>
+	<string>6</string>
+	<key>CFBundleIconFile</key>
+	<string>Warden</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.fus3r.Warden</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>warden</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Warden selects the Terminal or iTerm tab that runs an agent session when you click it.</string>
+</dict>
+</plist>

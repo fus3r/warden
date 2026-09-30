@@ -1,0 +1,22 @@
+{
+  "name": "Warden",
+  "short_name": "Warden",
+  "description": "What your coding agents need from you, from your Mac.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a122b",
+  "theme_color": "#0a122b",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

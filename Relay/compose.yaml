@@ -1,0 +1,35 @@
+services:
+  relay:
+    build:
+      context: ..
+      dockerfile: Relay/Dockerfile
+    restart: unless-stopped
+    environment:
+      PUBLIC_ORIGIN: https://${WARDEN_PHONE_HOST:?Set the public phone hostname}
+      TRUST_PROXY: "1"
+    volumes:
+      - phone-data:/data
+    expose:
+      - "8787"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  https:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      WARDEN_PHONE_HOST: ${WARDEN_PHONE_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - https-data:/data
+      - https-config:/config
+    depends_on:
+      - relay
+volumes:
+  phone-data:
+  https-data:
+  https-config:

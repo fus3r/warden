@@ -1,0 +1,50 @@
+site_name: Warden
+site_description: A macOS menu bar app for Claude Code and Codex.
+repo_url: https://github.com/fus3r/warden
+repo_name: fus3r/warden
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: en
+  font: false
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: light blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: light blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+
+plugins:
+  - search:
+      lang: en
+
+nav:
+  - Overview: index.md
+  - Getting started: getting-started.md
+  - Using Warden: usage.md
+  - Build and contribute: development.md
+  - Releasing Warden: releasing.md
+
+exclude_docs: |
+  /requirements.txt
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn

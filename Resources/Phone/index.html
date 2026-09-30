@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2f2f7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Warden">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="referrer" content="no-referrer">
+<title>Warden</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="plate" id="plate" data-lantern="idle">
+  <svg class="lantern" viewBox="0 0 12 16" aria-hidden="true">
+    <defs>
+      <linearGradient id="glass-light" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffe69e"/>
+        <stop offset="0.55" stop-color="#ffb54d"/>
+        <stop offset="1" stop-color="#eb7526"/>
+      </linearGradient>
+    </defs>
+    <circle class="metal-line" cx="6" cy="2.1" r="1.55"/>
+    <path class="metal" d="M1.95 5.15 H10.05 L7.85 4.05 H4.15 Z"/>
+    <rect class="glass-outline" x="2.8" y="6.4" width="6.4" height="6.6" rx="1.6"/>
+    <rect class="glass-lit" x="2.1" y="5.7" width="7.8" height="8" rx="2.1"/>
+    <path class="flame" d="M6.155 7.15 C6.465 8.21 7.55 9.27 7.55 10.648 C7.55 11.761 6.899 12.45 6 12.45 C5.101 12.45 4.45 11.761 4.45 10.648 C4.45 9.376 5.659 8.316 6.155 7.15 Z"/>
+    <rect class="mark" x="5.25" y="7" width="1.5" height="3.4" rx="0.75"/>
+    <circle class="mark" cx="6" cy="11.8" r="0.8"/>
+    <rect class="metal" x="1.1" y="13.6" width="9.8" height="1.9" rx="0.9"/>
+  </svg>
+  <div class="plate-text">
+    <h1 id="headline" aria-live="polite">Warden</h1>
+    <p id="subline"></p>
+  </div>
+</header>
+
+<main id="content" hidden>
+  <section id="needs" aria-labelledby="needs-title" hidden>
+    <h2 id="needs-title">Needs you</h2>
+    <div id="needs-list"></div>
+  </section>
+  <section id="working" aria-labelledby="working-title" hidden>
+    <h2 id="working-title">Working</h2>
+    <ul class="group" id="working-list"></ul>
+  </section>
+  <section id="limits" aria-labelledby="limits-title" hidden>
+    <h2 id="limits-title">Limits</h2>
+    <ul class="group" id="limits-list"></ul>
+  </section>
+  <footer class="footer">
+    <button type="button" class="link destructive" id="unpair">Unpair This Phone</button>
+  </footer>
+</main>
+
+<main id="pairing" hidden>
+  <section class="group padded">
+    <p class="lead">On your Mac, open Warden Settings, choose Phone, then Pair a Phone. Scan the code with this phone's camera, or type the six digits shown under it.</p>
+    <form id="pair-form" class="pair-form" autocomplete="off">
+      <label for="code" class="visually-hidden">Pairing code</label>
+      <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" placeholder="123 456" enterkeyhint="go">
+      <button type="submit" class="button primary" id="pair-button">Pair</button>
+    </form>
+    <p class="note" id="pair-note" role="status"></p>
+  </section>
+</main>
+
+<main id="offline" hidden>
+  <section class="group padded">
+    <p class="lead" id="offline-text"></p>
+    <button type="button" class="button" id="retry">Try Again</button>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,12 @@
+.build/
+build/
+.DS_Store
+*.xcuserstate
+.swiftpm/
+node_modules/
+*.vsix
+*.whl
+Relay/data/
+.env
+.env.*
+site/

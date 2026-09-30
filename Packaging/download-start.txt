@@ -1,0 +1,87 @@
+WARDEN @VERSION@ (BUILD @BUILD@) — PUBLIC BETA
+
+For Apple silicon and Intel Macs running macOS 14 or later.
+Warden lives under the lantern icon in your menu bar.
+The DMG includes the app and train-guard. The optional VS Code companion is
+available as a separate release download and is also included in the ZIP.
+No Warden subscription, personal server, Xcode or Python installation is needed.
+
+INSTALL
+
+1. Download the Warden DMG or ZIP from https://github.com/fus3r/warden/releases .
+   Open the DMG, or extract the ZIP.
+2. If Warden is already running, quit it from its menu.
+3. Drag Warden.app into Applications, then open that copy.
+
+This beta is not notarized by Apple.
+If macOS says it cannot verify the developer or check the app for malicious
+software, dismiss the message. To allow the copy you downloaded from the
+official release: System Settings → Privacy & Security → Open Anyway,
+then confirm Warden. This permission applies to this app.
+Do not disable Gatekeeper or remove quarantine in Terminal.
+If the message says the app is damaged or will damage your computer, stop
+installing it and report the message: https://github.com/fus3r/warden/issues .
+
+Apple's instructions: https://support.apple.com/102445
+
+GET STARTED (ABOUT TEN MINUTES)
+
+1. The interactive guide opens on a fresh installation. Try the approval
+   exercise; it runs no command. Reopen it with Interactive Guide… in Warden's menu.
+2. Start a Claude Code or Codex session in your usual terminal. Confirm that
+   it appears in Warden and clicking it brings you back to the right window.
+3. For Claude Code, use Connect… in the guide. Warden shows the changes before
+   applying them and backs up existing settings.
+4. Choose notifications in Settings → Setup, then try the notification test.
+   Explore History and Work Planner after working for a while.
+
+If you use VS Code's integrated terminals, install warden-terminal.vsix via
+Extensions → … → Install from VSIX… . The companion selects the right terminal.
+If VS Code asks to reload the window, wait until your sessions can be interrupted.
+
+TRAIN-GUARD (OPTIONAL)
+
+Install train-guard in Settings → General. Its runtime is already in the app.
+Open a new terminal and try a disposable job:
+
+  train-guard run --name warden-test -- /bin/sleep 30
+  train-guard status
+
+On battery, the job may stay paused until you reconnect power.
+To end the test if needed: train-guard stop warden-test --kill
+Keep your usual backups and checkpoints for real computations.
+
+PHONE ACCESS AND SLEEP (OPTIONAL)
+
+The phone and Mac must be on the same local network, and the Mac must stay
+awake. Settings → Phone guides you through the HTTPS profile and QR pairing.
+Mobile-data access and hosted-relay notifications are not enabled in this beta.
+
+Configure Keep Awake in Settings → Power. Keep the lid open for a first test.
+Closed-lid operation requires separate macOS approval and must be verified
+on the target Mac with a disposable job.
+
+REPORT A PROBLEM
+
+Use Warden through a few ordinary work sessions. Report problems at:
+https://github.com/fus3r/warden/issues/new?template=bug.yml
+Reports are public. Include the steps, expected and actual result, macOS
+version and Warden build. Redact conversation titles, projects, commands and
+personal information in screenshots. Do not share conversations, credentials,
+complete logs or pairing links.
+
+UNINSTALL
+
+To take a break, quit Warden from its menu. Before removing it, disconnect
+Claude Code and turn off Open at Login in Settings. If you enabled the
+closed-lid service, disable it in Power before deleting the app.
+If you installed train-guard, wait until supervised jobs finish and use its
+Remove… button; it can also remain installed separately.
+You can then remove Warden.app and the optional VS Code companion.
+Local settings and history are retained for a later installation.
+
+SOURCE CODE AND LICENSES
+
+Warden is available under MIT: https://github.com/fus3r/warden
+Sounds and dependencies retain their own licenses and credits, included in
+Warden.app/Contents/Resources and its bundled TrainGuard helper.

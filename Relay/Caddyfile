@@ -1,0 +1,5 @@
+{$WARDEN_PHONE_HOST} {
+    reverse_proxy relay:8787 {
+        header_up X-Warden-Client-IP {remote_host}
+    }
+}

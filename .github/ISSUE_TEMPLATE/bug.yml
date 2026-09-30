@@ -1,0 +1,32 @@
+name: Report a problem
+description: Installation or use of the Warden beta
+body:
+  - type: markdown
+    attributes:
+      value: "This report is public. Do not include conversations, credentials, pairing links or complete logs. Redact private information from screenshots."
+  - type: input
+    id: version
+    attributes:
+      label: Warden version and build
+      placeholder: 0.4.0 (6)
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: macOS version and Mac hardware
+      placeholder: macOS version, Apple Silicon or Intel
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
