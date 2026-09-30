@@ -8,7 +8,7 @@ Use the exact train-guard wheel published with this beta. It contains the Python
 
 ```sh
 mkdir -p build/dependencies
-curl -fL https://github.com/fus3r/warden/releases/download/v0.4.0-beta.6/train_guard-0.5.0.dev0-py3-none-any.whl \
+curl -fL https://github.com/fus3r/warden/releases/download/v0.4.0-beta.7/train_guard-0.5.0.dev0-py3-none-any.whl \
   -o build/dependencies/train_guard-0.5.0.dev0-py3-none-any.whl
 export WARDEN_TRAIN_GUARD_WHEEL="$PWD/build/dependencies/train_guard-0.5.0.dev0-py3-none-any.whl"
 ./Scripts/build-app.sh

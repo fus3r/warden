@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 beta (build 7)
+
+- Alert for Codex questions while the agent keeps working, without repeating the alert when the turn ends with the same question open.
+- Open Settings and report windows reliably from the menu.
+- Correct session liveness and preserve saved usage when source logs are no longer available during migration.
+- Keep usage reads and approvals on the selected account, and stop monitoring accounts that have been removed.
+- Escape special characters in Claude Code hook paths.
+- Revoke pending phone state requests when a device is unpaired, so it cannot receive later updates.
+- Expand the documentation with illustrated guides for setup, sessions, notifications, history, power and phone access.
+
 ## 0.4.0 beta (build 6)
 
 - Native menu bar monitoring for Claude Code and Codex, with session navigation, supported approvals, notifications and widgets.
