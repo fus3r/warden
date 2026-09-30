@@ -21,9 +21,8 @@ public struct AgentAccount: Hashable, Identifiable, Sendable {
         folder.appendingPathComponent(provider == .claude ? "projects" : "sessions", isDirectory: true)
     }
 
-    /// The environment that points the agent's own CLI at this account, empty for the default account.
+    /// Pins the CLI to this account, including when Warden inherited another account's environment.
     public var environment: [String: String] {
-        guard name != nil else { return [:] }
         return [provider == .claude ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME": folder.path]
     }
 
@@ -47,6 +46,11 @@ public struct AgentAccount: Hashable, Identifiable, Sendable {
 }
 
 public enum Accounts {
+    /// Whether a session, quota reading, or approval belongs to an account still being followed.
+    public static func follows(_ provider: AgentProvider, account: String?, in accounts: [AgentAccount]) -> Bool {
+        accounts.contains { $0.provider == provider && $0.name == account }
+    }
+
     /// The default accounts, other folders in the home folder that hold an agent's sessions, such as
     /// `~/.claude-work`, and folders the user added. Folders the user removed are left out.
     public static func discover(home: URL, codexHome: URL? = nil, added: [URL] = [], removed: Set<String> = [],

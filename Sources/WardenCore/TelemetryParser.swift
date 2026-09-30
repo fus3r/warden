@@ -302,6 +302,7 @@ public enum TelemetryParser {
 
     public static func merge(_ session: AgentSession, status: BridgeStatus?, event: BridgeEvent?) -> AgentSession {
         var result = session
+        result.account = event?.account ?? result.account
         if let status {
             if let dir = status.projectDir, !dir.isEmpty { result.cwd = dir }
             else if !status.cwd.isEmpty { result.cwd = status.cwd }

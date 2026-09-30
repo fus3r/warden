@@ -300,12 +300,12 @@ final class WardenStore: ObservableObject {
             return
         }
         isScanning = true
-        connectCodex()
         if Date().timeIntervalSince(accountsDiscoveredAt) >= 60 {
             let discovered = Self.discoverAccounts()
             if discovered != accounts { accounts = discovered }
             accountsDiscoveredAt = Date()
         }
+        connectCodex()
         let scanner = self.scanner
         let helper = helperURL
         let accounts = self.accounts
@@ -378,7 +378,9 @@ final class WardenStore: ObservableObject {
 
     func reloadAccounts() {
         accounts = Self.discoverAccounts()
-        refresh()
+        releaseUnfollowedApprovals()
+        // Queue a new scan even if the scan of the previous account list is still running.
+        refresh(usage: true)
     }
 
     /// Adds what the session logs gained since the last read: once a minute, or sooner when the menu opens.
@@ -512,6 +514,10 @@ final class WardenStore: ObservableObject {
     }
 
     private func receive(_ request: ApprovalRequest) {
+        guard Accounts.follows(request.provider, account: request.account, in: accounts) else {
+            if request.provider == .claude { approvalServer.answer(request.id, with: .undecided) }
+            return
+        }
         guard !approvals.contains(where: { $0.request.id == request.id }) else { return }
         approvals.append(PendingApproval(request: request, receivedAt: Date()))
         publishToPhone()
@@ -527,6 +533,13 @@ final class WardenStore: ObservableObject {
         approvals.removeAll { $0.request.id == id }
         alerts.withdraw(id)
         publishToPhone()
+    }
+
+    private func releaseUnfollowedApprovals() {
+        for approval in approvals where !Accounts.follows(approval.request.provider, account: approval.request.account, in: accounts) {
+            if approval.request.provider == .claude { approvalServer.answer(approval.request.id, with: .undecided) }
+            forget(approval.request.id)
+        }
     }
 
     // MARK: Phone and widgets
@@ -797,8 +810,10 @@ final class WardenStore: ObservableObject {
         #endif
         isScanning = false
         let waits = codexWaits.values.reduce(into: [String: CodexApprovals.Wait]()) { $0.merge($1) { first, _ in first } }
-        sessions = CodexApprovals.applying(waits, to: result.sessions)
-        windows = result.windows
+        let followed = result.sessions.filter { Accounts.follows($0.provider, account: $0.account, in: accounts) }
+        sessions = CodexApprovals.applying(waits, to: followed)
+        windows = result.windows.filter { Accounts.follows($0.provider, account: $0.account, in: accounts) }
+        releaseUnfollowedApprovals()
         paceTracker.record(windows, now: result.scannedAt)
         if defaults.bool(forKey: "historyEnabled") {
             quotaReadings += windows.filter { previousWindows[$0.id]?.observedAt != $0.observedAt }
@@ -808,7 +823,7 @@ final class WardenStore: ObservableObject {
         recordActivity(now: result.scannedAt)
         checkPresence(now: result.scannedAt)
         checkProviderStatus(now: result.scannedAt)
-        plans = result.plans
+        plans = result.plans.filter { Accounts.follows($0.provider, account: $0.account, in: accounts) }
         processes = result.processes
         nativeApps = result.nativeApps
         scannedAt = result.scannedAt

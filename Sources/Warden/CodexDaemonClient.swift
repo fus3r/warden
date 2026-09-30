@@ -256,12 +256,13 @@ final class CodexDaemonClient: @unchecked Sendable {
         guard prompts[key] == nil else { return }
         let state = threads[thread]
         let rules = (account.folder.appendingPathComponent("rules/default.rules").path as NSString).abbreviatingWithTildeInPath
-        guard let request = CodexApprovals.request(method: method, params: params, id: key, sessionID: state?.session ?? thread,
+        guard var request = CodexApprovals.request(method: method, params: params, id: key, sessionID: state?.session ?? thread,
                                                    cwd: state?.cwd, paths: (params["itemId"] as? String).flatMap { edits[$0] } ?? [],
                                                    rules: rules) else {
             log?("left to the terminal: \(method)")
             return
         }
+        request.account = account.name
         prompts[key] = Prompt(rpcID: rpcID, method: method, params: params, thread: thread, request: request)
         log?("prompt \(key): \(request.tool) \(request.summary ?? "")")
         DispatchQueue.main.async { self.onRequest?(request) }

@@ -2,6 +2,18 @@ import XCTest
 @testable import WardenCore
 
 final class AccountsTests: XCTestCase {
+    func testDefaultAccountsOverrideInheritedAlternativeFolders() {
+        let home = URL(fileURLWithPath: "/tmp/warden-accounts")
+        let inherited = ["CLAUDE_CONFIG_DIR": "/tmp/other-claude", "CODEX_HOME": "/tmp/other-codex"]
+        for (provider, folder, key) in [(AgentProvider.claude, ".claude", "CLAUDE_CONFIG_DIR"),
+                                        (.codex, ".codex", "CODEX_HOME")] {
+            let account = AgentAccount(provider: provider, folder: home.appendingPathComponent(folder), name: nil)
+            let environment = inherited.merging(account.environment) { $1 }
+            XCTAssertEqual(environment[key], account.folder.path,
+                           "The CLI must read the selected default account even when Warden inherits another folder.")
+        }
+    }
+
     func testOtherAccountsAreFoundBesideTheDefaultFolders() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: home) }

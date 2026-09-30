@@ -31,6 +31,8 @@ public struct ApprovalRequest: Codable, Equatable, Identifiable {
     public var cwd: String?
     /// The bridge sends Claude Code's requests without it.
     public var provider: AgentProvider = .claude
+    /// The account whose session is asking. Older bridges omit it.
+    public var account: String? = nil
 
     /// The file that holds a kept rule, for a sentence. Codex requests name their rules file in `alwaysIn`.
     public var alwaysFile: String? {
@@ -59,6 +61,7 @@ extension ApprovalRequest {
         alwaysIn = try container.decodeIfPresent(String.self, forKey: .alwaysIn)
         cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
         provider = try container.decodeIfPresent(AgentProvider.self, forKey: .provider) ?? .claude
+        account = try container.decodeIfPresent(String.self, forKey: .account)
     }
 }
 
@@ -90,7 +93,7 @@ public enum Approval {
     public static var socket: URL { WardenPaths.support.appendingPathComponent("ipc/approvals.sock") }
 
     /// The request Warden shows, from the PermissionRequest hook input.
-    public static func request(from hook: [String: Any], id: String, sessionID: String) -> ApprovalRequest? {
+    public static func request(from hook: [String: Any], id: String, sessionID: String, account: String? = nil) -> ApprovalRequest? {
         guard let tool = hook["tool_name"] as? String, !tool.isEmpty else { return nil }
         let input = hook["tool_input"] as? [String: Any] ?? [:]
         let suggestions = hook["permission_suggestions"] as? [[String: Any]] ?? []
@@ -111,7 +114,7 @@ public enum Approval {
                                canAllowForSession: !suggestions.isEmpty, questions: questions,
                                alwaysRule: kept.isEmpty ? nil : kept.joined(separator: ", "),
                                alwaysIn: kept.isEmpty ? nil : persistent.first?["destination"] as? String,
-                               cwd: hook["cwd"] as? String)
+                               cwd: hook["cwd"] as? String, account: account)
     }
 
     /// Allow rules Claude Code offers to keep in a settings file rather than for the session only.

@@ -2,6 +2,16 @@ import XCTest
 @testable import WardenCore
 
 final class ApprovalTests: XCTestCase {
+    func testBridgeRequestRetainsItsNamedAccount() throws {
+        let data = Data(#"{"id":"r-work","sessionID":"s-work","tool":"Bash","canAllowForSession":false,"questions":[],"account":"work"}"#.utf8)
+        let request = try JSONDecoder().decode(ApprovalRequest.self, from: data)
+        let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+        XCTAssertEqual(encoded["account"] as? String, "work")
+        XCTAssertEqual(request.provider, .claude, "Requests from older bridges carry no provider.")
+        let legacy = Data(#"{"id":"r-default","sessionID":"s-default","tool":"Bash","canAllowForSession":false,"questions":[]}"#.utf8)
+        XCTAssertNil(try JSONDecoder().decode(ApprovalRequest.self, from: legacy).account)
+    }
+
     private func hook(_ json: String) throws -> [String: Any] {
         try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
     }

@@ -20,6 +20,7 @@ let package = Package(
         .executableTarget(name: "WardenWidgets", dependencies: ["WardenCore"],
                           swiftSettings: [.unsafeFlags(["-application-extension"])],
                           linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]),
-        .testTarget(name: "WardenCoreTests", dependencies: ["WardenCore"])
+        .testTarget(name: "WardenCoreTests", dependencies: ["WardenCore"]),
+        .testTarget(name: "WardenTests", dependencies: ["Warden", "WardenCore"])
     ]
 )

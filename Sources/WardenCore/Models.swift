@@ -337,9 +337,11 @@ public struct BridgeEvent: Codable, Identifiable {
     /// Tool name for an approval or error type for a failure. Never prompt or reply text.
     public var detail: String?
     public var host: SessionHost?
+    /// The account the hook runs for. Older events omit it.
+    public var account: String?
 
     public init(id: String, sessionID: String, cwd: String, kind: String, at: Date,
-                detail: String? = nil, host: SessionHost? = nil) {
+                detail: String? = nil, host: SessionHost? = nil, account: String? = nil) {
         self.id = id
         self.sessionID = sessionID
         self.cwd = cwd
@@ -347,6 +349,7 @@ public struct BridgeEvent: Codable, Identifiable {
         self.at = at
         self.detail = detail
         self.host = host
+        self.account = account
     }
 }
 

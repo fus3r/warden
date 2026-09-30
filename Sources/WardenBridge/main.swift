@@ -60,6 +60,8 @@ if object["cursor_version"] != nil || ProcessInfo.processInfo.environment["DEVIN
 let rawID = (object["session_id"] as? String) ?? ""
 let safeID = String(rawID.filter { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }.prefix(128))
 let now = Date()
+let account = AgentAccount.claudeName(environment: ProcessInfo.processInfo.environment,
+                                     home: FileManager.default.homeDirectoryForCurrentUser)
 let encoder = JSONEncoder()
 encoder.dateEncodingStrategy = .iso8601
 
@@ -85,9 +87,6 @@ if mode == "claude-status" {
     let context = object["context_window"] as? [String: Any] ?? [:]
     let limits = object["rate_limits"] as? [String: Any] ?? [:]
     let contextPercent = number(context["used_percentage"])
-    // A second account runs with CLAUDE_CONFIG_DIR, and its limits are its own.
-    let account = AgentAccount.claudeName(environment: ProcessInfo.processInfo.environment,
-                                          home: FileManager.default.homeDirectoryForCurrentUser)
     var windows: [UsageWindow] = []
     for (field, label, minutes) in [("five_hour", "5h", 300), ("seven_day", "7d", 10_080)] {
         guard let value = limits[field] as? [String: Any], let percent = number(value["used_percentage"]) else { continue }
@@ -150,11 +149,11 @@ if mode == "claude-status" {
     default: detail = nil
     }
     save(BridgeEvent(id: UUID().uuidString, sessionID: safeID, cwd: object["cwd"] as? String ?? "",
-                     kind: kind, at: now, detail: detail, host: agentHost()),
+                     kind: kind, at: now, detail: detail, host: agentHost(), account: account),
          in: WardenPaths.eventDirectory)
     // Claude Code shows its prompt and runs this hook alongside it. Whichever answers first decides.
     if name == "PermissionRequest",
-       let request = Approval.request(from: object, id: UUID().uuidString, sessionID: safeID),
+       let request = Approval.request(from: object, id: UUID().uuidString, sessionID: safeID, account: account),
        let answer = askWarden(request),
        let output = Approval.hookOutput(for: answer, hook: object),
        let data = try? JSONSerialization.data(withJSONObject: output) {

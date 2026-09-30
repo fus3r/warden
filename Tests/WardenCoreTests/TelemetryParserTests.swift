@@ -2,6 +2,20 @@ import XCTest
 @testable import WardenCore
 
 final class TelemetryParserTests: XCTestCase {
+    func testClaudeHookKeepsItsAccountBeforeTheStatusLineArrives() throws {
+        let data = Data(#"{"id":"e1","sessionID":"s-work","cwd":"/tmp/app","kind":"working","at":1790760000,"account":"work"}"#.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let event = try decoder.decode(BridgeEvent.self, from: data)
+        let session = AgentSession(id: "s-work", provider: .claude, surface: "Terminal", cwd: "/tmp/app", updatedAt: .distantPast)
+        XCTAssertEqual(TelemetryParser.merge(session, status: nil, event: event).account, "work")
+        let legacy = Data(#"{"id":"e1","sessionID":"s-work","cwd":"/tmp/app","kind":"working","at":1790760000}"#.utf8)
+        var known = session
+        known.account = "work"
+        let oldEvent = try decoder.decode(BridgeEvent.self, from: legacy)
+        XCTAssertEqual(TelemetryParser.merge(known, status: nil, event: oldEvent).account, "work")
+    }
+
     func testCodexLogMapsContextAndWeeklyQuotaWithoutTreatingCumulativeTokensAsContext() throws {
         let lines = [
             #"{"type":"session_meta","payload":{"id":"session-1","cwd":"/tmp/work","originator":"codex-tui","source":"cli"}}"#,

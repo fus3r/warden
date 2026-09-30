@@ -102,7 +102,7 @@ final class TelemetryScanner: @unchecked Sendable {
             if let old = unique[key], old.updatedAt >= session.updatedAt { continue }
             unique[key] = session
         }
-        sessions = Array(unique.values)
+        sessions = unique.values.filter { Accounts.follows($0.provider, account: $0.account, in: accounts) }
 
         let (processes, apps) = processSnapshot()
         for view in claudeAgents(accounts, now: now, soon: refreshUsage, running: processes.contains { $0.provider == .claude }) {
@@ -175,7 +175,7 @@ final class TelemetryScanner: @unchecked Sendable {
         sessions = Array(sessions.prefix(30))
 
         let windows = mergeWindows(sessions.flatMap(\.windows) + unlistedWindows + accountUsage(accounts, now: now, soon: refreshUsage),
-                                   now: now)
+                                   accounts: accounts, now: now)
         if now.timeIntervalSince(lastPrune) > 3600 {
             lastPrune = now
             // Logs no longer among the recent ones leave the cache, so it stays small while Warden runs for weeks.
@@ -270,7 +270,7 @@ final class TelemetryScanner: @unchecked Sendable {
     }
 
     /// Latest value per window, kept across restarts so a weekly window stays visible between sessions.
-    private func mergeWindows(_ fresh: [UsageWindow], now: Date) -> [UsageWindow] {
+    private func mergeWindows(_ fresh: [UsageWindow], accounts: [AgentAccount], now: Date) -> [UsageWindow] {
         if storedWindows == nil {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
@@ -278,7 +278,9 @@ final class TelemetryScanner: @unchecked Sendable {
                 .flatMap { try? decoder.decode([UsageWindow].self, from: $0) } ?? []
             storedWindows = Dictionary(saved.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         }
-        let merged = UsageWindow.latest(storedWindows ?? [:], adding: fresh, now: now)
+        let followed = (storedWindows ?? [:]).filter { Accounts.follows($0.value.provider, account: $0.value.account, in: accounts) }
+        let fresh = fresh.filter { Accounts.follows($0.provider, account: $0.account, in: accounts) }
+        let merged = UsageWindow.latest(followed, adding: fresh, now: now)
         let changed = merged != storedWindows
         storedWindows = merged
         if changed {
