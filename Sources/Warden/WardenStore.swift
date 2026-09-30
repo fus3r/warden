@@ -852,10 +852,10 @@ final class WardenStore: ObservableObject {
 }
 
 @MainActor
-private final class AlertEngine: NSObject, UNUserNotificationCenterDelegate {
+final class AlertEngine: NSObject, UNUserNotificationCenterDelegate {
     private enum Kind { case attention, finish, context, quota }
 
-    private let center = UNUserNotificationCenter.current()
+    private lazy var center = UNUserNotificationCenter.current()
     private let sounds: SoundLibrary
     private var alertedKeys = Set<String>()
     /// Alerts already given to automation scripts, which get them even while alerts stay silent.
@@ -975,7 +975,12 @@ private final class AlertEngine: NSObject, UNUserNotificationCenterDelegate {
         func style(_ session: AgentSession) -> AlertStyle { styles[session.id] ?? .general(for: session.provider) }
         for session in sessions where style(session) != .muted {
             guard let old = previous[session.id] else { continue }
-            if session.phase == .needsAttention && old.phase != .needsAttention && defaults.bool(forKey: "alertAttention") {
+            // Codex can ask a question and keep working. Alert when it appears, then stay quiet if the turn
+            // ends with the same question still open.
+            let sameQuestion = session.attention == .choice && old.attention == .choice && session.detail == old.detail
+            let newQuestion = session.phase == .working && session.attention == .choice && !sameQuestion
+            let newWait = session.phase == .needsAttention && old.phase != .needsAttention && !sameQuestion
+            if (newQuestion || newWait) && defaults.bool(forKey: "alertAttention") {
                 if session.attention == .permission || session.attention == .choice,
                    let prompted = promptedAt[session.id], now.timeIntervalSince(prompted) < 120 {
                     // Already alerted when the prompt reached Warden.
@@ -1202,7 +1207,7 @@ private final class AlertEngine: NSObject, UNUserNotificationCenterDelegate {
             line = session.detail == "quota_auto_resume_stale" ? .needsYou : MenuFormat.isLimit(session.detail) ? .limitReached : .error
             text = MenuFormat.failure(session.detail)
         case (_, .interrupted): (line, text) = (.waiting, "Interrupted, waiting for you")
-        case (_, .choice): (line, text) = (.question, "Waiting for your answer")
+        case (_, .choice): (line, text) = (.question, session.detail ?? "Waiting for your answer")
         case (_, .question): (line, text) = (.question, "Asked you a question")
         default: (line, text) = (.needsYou, "Needs your attention")
         }
