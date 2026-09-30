@@ -9,6 +9,8 @@ theme:
   name: material
   language: en
   font: false
+  logo: assets/icon.png
+  favicon: assets/icon.png
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -27,8 +29,26 @@ theme:
   features:
     - content.code.copy
     - navigation.sections
+    - navigation.path
+    - navigation.footer
     - navigation.top
     - search.highlight
+    - search.suggest
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+extra_javascript:
+  - assets/javascripts/screenshots.js
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+  - toc:
+      permalink: true
 
 plugins:
   - search:
@@ -36,10 +56,28 @@ plugins:
 
 nav:
   - Overview: index.md
-  - Getting started: getting-started.md
-  - Using Warden: usage.md
-  - Build and contribute: development.md
-  - Releasing Warden: releasing.md
+  - Get started:
+      - Install Warden: getting-started.md
+      - Connect your sessions: guide/connections.md
+  - User guide:
+      - Find a guide: usage.md
+      - Sessions and the menu: guide/sessions.md
+      - Approvals and questions: guide/prompts.md
+      - Notifications and sounds: guide/notifications.md
+      - Context and quotas: guide/limits.md
+      - History and reports: guide/history.md
+      - Work Planner: guide/planner.md
+  - Long jobs and devices:
+      - train-guard: guide/train-guard.md
+      - Keep Awake: guide/power.md
+      - Phone access: guide/phone.md
+      - Automations: guide/automations.md
+  - Reference:
+      - Sources and privacy: reference/privacy.md
+      - Troubleshooting: reference/troubleshooting.md
+  - Development:
+      - Build and contribute: development.md
+      - Release Warden: releasing.md
 
 exclude_docs: |
   /requirements.txt

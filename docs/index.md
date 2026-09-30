@@ -1,27 +1,39 @@
 # Warden
 
-Warden puts your Claude Code and Codex sessions in the macOS menu bar. See which ones are working or waiting for you, return to a session's terminal, and check the context and quota information its provider makes available.
+Your Claude Code and Codex sessions, in the macOS menu bar.
+{ .warden-lead }
 
-The app runs on **macOS 14 or later**, on Apple silicon and Intel. Monitoring and history stay on your Mac. Warden does not read provider credentials.
+<div class="warden-home" markdown="1">
+<div markdown="1">
 
-## Start here
+See which sessions are working or waiting for you, return to their terminals, and check context and quota readings before starting more work.
 
-[Download Warden from GitHub Releases](https://github.com/fus3r/warden/releases), drag the app into Applications and follow its interactive guide. The [getting started guide](getting-started.md) covers installation, connections and your first session.
+**macOS 14+ · Apple silicon and Intel**
 
-The current version is **0.4.0 beta, build 6**. It includes an offline train-guard runtime and local phone access. It is not yet notarized by Apple.
+[Install Warden](getting-started.md){ .md-button .md-button--primary }
+[Download beta](https://github.com/fus3r/warden/releases){ .md-button }
 
-## Find a guide
+## Find your next step
 
-| Task | Guide |
-| --- | --- |
-| Install and connect your first session | [Getting started](getting-started.md) |
-| Set up alerts, inspect usage or answer prompts | [Using Warden](usage.md) |
-| Understand local data and provider access | [Data and privacy](usage.md#data-and-limits) |
-| Build the app or contribute a fix | [Build and contribute](development.md) |
-| Package a release and check it on another Mac | [Releasing Warden](releasing.md) |
+- **New to Warden?** [Connect your first session](guide/connections.md), then [learn the menu](guide/sessions.md).
+- **A session needs you?** [Answer approvals and questions](guide/prompts.md) or [choose your alerts](guide/notifications.md).
+- **Planning more work?** [Read your quotas](guide/limits.md), [inspect History](guide/history.md), or [open Work Planner](guide/planner.md).
+- **Stepping away?** Set up [train-guard](guide/train-guard.md), [Keep Awake](guide/power.md), and [phone access](guide/phone.md).
 
-## Long jobs and phone access
+[Browse all guides →](usage.md)
 
-Install train-guard from Warden's settings to supervise long local jobs without installing Python. It can pause jobs on battery or adjust their scheduling according to your policy. It does not replace checkpoints or the Mac's hardware protections.
+</div>
+<figure class="warden-menu-shot" markdown="span">
+[![The Warden menu showing sessions needing attention, running sessions, and account usage.](assets/screenshots/menu.png)](assets/screenshots/menu.png)
+<figcaption>The native Warden menu. Sample sessions and readings; click any screenshot to enlarge it.</figcaption>
+</figure>
+</div>
 
-Phone access in this beta uses the same local network. A hosted relay is not included. The [relay source and deployment instructions](https://github.com/fus3r/warden/tree/main/Relay) are available for self-hosting.
+!!! info "About this beta"
+    **0.4.0 beta, build 6** includes the train-guard runtime and local-network phone access. It is not yet notarized by Apple; the [installation guide](getting-started.md#first-launch-of-this-beta) explains first launch. A hosted phone relay is available for self-hosting, and is not included in this beta.
+
+## Local monitoring, visible sources
+
+Monitoring and history stay on your Mac. Warden does not read provider credentials. Readings distinguish provider values, local logs, estimates, and unavailable information. [Sources and privacy](reference/privacy.md) explains what is read, stored, and shared with optional integrations.
+
+Building from source? Start with [Build and contribute](development.md).

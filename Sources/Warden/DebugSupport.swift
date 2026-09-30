@@ -320,12 +320,12 @@ enum DebugSupport {
         exit(0)
     }
 
-    /// `WARDEN_RENDER_HISTORY=/path.png` reads the usage history and renders its menu view offscreen, then quits.
+    /// `WARDEN_RENDER_HISTORY=/path.png` reads the usage history, captures a native report window, then quits.
     static func renderHistoryIfRequested() -> Bool {
         guard let path = ProcessInfo.processInfo.environment["WARDEN_RENDER_HISTORY"] else { return false }
         let summary = usesFixture ? sampleHistory()
             : UsageSummary(records: UsageHistory().update(accounts: WardenStore.discoverAccounts()).records)
-        render(HistoryReportView(summary: summary), size: NSSize(width: 780, height: 740), to: path)
+        render(HistoryReportView(summary: summary), size: NSSize(width: 780, height: 740), to: path, title: "Warden History")
         return true
     }
 
@@ -347,7 +347,7 @@ enum DebugSupport {
                                                            coverage: now.addingTimeInterval(-8 * 86_400))
             try? FileManager.default.removeItem(at: scratch)
         }
-        render(LimitsReportView(quota: quota), size: NSSize(width: 800, height: 900), to: path)
+        render(LimitsReportView(quota: quota), size: NSSize(width: 800, height: 900), to: path, title: "Warden Limits")
         return true
     }
 
@@ -355,7 +355,7 @@ enum DebugSupport {
     static func renderActivityIfRequested() -> Bool {
         guard let path = ProcessInfo.processInfo.environment["WARDEN_RENDER_ACTIVITY"] else { return false }
         render(ActivityReportView(spans: sampleActivity(), titles: ["f3": "Native menu bar redesign", "f4": "Fix header layout"]),
-               size: NSSize(width: 800, height: 1000), to: path)
+               size: NSSize(width: 800, height: 1000), to: path, title: "Warden Activity")
         return true
     }
 
@@ -363,48 +363,56 @@ enum DebugSupport {
         guard let path = ProcessInfo.processInfo.environment["WARDEN_RENDER_PLANNER"] else { return false }
         let scan = sampleScan()
         render(WorkPlannerReport(windows: scan.windows, tracker: samplePace(windows: scan.windows),
-                                 sessions: scan.sessions, now: Date(), scannedAt: scan.scannedAt), size: NSSize(width: 740, height: 720), to: path)
+                                 sessions: scan.sessions, now: Date(), scannedAt: scan.scannedAt), size: NSSize(width: 740, height: 720), to: path,
+               title: "Warden Work Planner")
         return true
     }
 
-    private static func render(_ content: some View, size: NSSize, to path: String) {
+    private static func render(_ content: some View, size: NSSize, to path: String, title: String) {
         let environment = ProcessInfo.processInfo.environment
         let size = NSSize(width: environment["WARDEN_RENDER_WIDTH"].flatMap(Double.init) ?? size.width,
                           height: environment["WARDEN_RENDER_HEIGHT"].flatMap(Double.init) ?? size.height)
-        // Menus draw their own material behind item views; a plain dark fill stands in for it.
-        let view = NSHostingView(rootView: content)
-        view.frame = NSRect(origin: .zero, size: size)
-        let window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        let controller = NSHostingController(rootView: content)
+        let window = NSWindow(contentViewController: controller)
+        window.title = title
+        window.setContentSize(size)
         window.appearance = NSAppearance(named: ProcessInfo.processInfo.environment["WARDEN_APPEARANCE"] == "light" ? .aqua : .darkAqua)
-        window.contentView = view
+        // SwiftUI's offscreen cache can rasterize at 1x even when the bitmap reports 2x. Capture the window's
+        // backing store instead, so text and controls keep their native Retina detail.
+        window.orderFront(nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            view.layoutSubtreeIfNeeded()
-            if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
-                view.cacheDisplay(in: view.bounds, to: rep)
-                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+            controller.view.layoutSubtreeIfNeeded()
+            typealias Capture = @convention(c) (CGRect, CGWindowListOption, CGWindowID, CGWindowImageOption) -> Unmanaged<CGImage>?
+            if let symbol = dlsym(dlopen(nil, RTLD_NOW), "CGWindowListCreateImage") {
+                let capture = unsafeBitCast(symbol, to: Capture.self)
+                if let image = capture(.null, .optionIncludingWindow, CGWindowID(window.windowNumber),
+                                       [.boundsIgnoreFraming, .bestResolution])?.takeRetainedValue() {
+                    try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?
+                        .write(to: URL(fileURLWithPath: path))
+                }
             }
             exit(0)
         }
     }
 
-    /// Offscreen guide layouts, with `-tutorialChapter <chapter>` as a process-only defaults override.
+    /// Guide captures, with `-tutorialChapter <chapter>` as a process-only defaults override.
     @MainActor static func renderTutorialIfRequested(store: WardenStore) -> Bool {
         guard let path = ProcessInfo.processInfo.environment["WARDEN_RENDER_TUTORIAL"] else { return false }
         guard usesFixture else { return false }
         store.start()
         render(TutorialView(store: store, openSettings: { _ in }, openHistory: {}, openPlanner: {}, close: {}),
-               size: NSSize(width: 900, height: 640), to: path)
+               size: NSSize(width: 900, height: 640), to: path, title: "Warden Guide")
         return true
     }
 
-    /// `WARDEN_RENDER_SETTINGS=/path.png` renders the Settings window offscreen, then quits.
+    /// `WARDEN_RENDER_SETTINGS=/path.png` captures the Settings window, then quits.
     @MainActor static func renderSettingsIfRequested(store: WardenStore) -> Bool {
         guard let path = ProcessInfo.processInfo.environment["WARDEN_RENDER_SETTINGS"] else { return false }
         // The Phone tab shows the certificate and the network once the companion has started.
         store.phone.start()
         // And Long Jobs once it has looked for train-guard, which it does when the tab appears.
         store.trainGuard.refresh(accounts: store.accounts)
-        render(WardenSettings(store: store), size: NSSize(width: 540, height: WardenSettings.height), to: path)
+        render(WardenSettings(store: store), size: NSSize(width: 540, height: WardenSettings.height), to: path, title: "Warden Settings")
         return true
     }
 
