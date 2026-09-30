@@ -4,7 +4,7 @@ A native macOS menu bar app for Claude Code and Codex. Find sessions that need y
 
 **macOS 14+ · Apple silicon and Intel · MIT**
 
-[Download](https://github.com/fus3r/warden/releases) · [Documentation](docs/index.md) · [Changelog](CHANGELOG.md)
+[Download](https://github.com/fus3r/warden/releases) · [Documentation](https://warden.readthedocs.io/en/latest/) · [Changelog](CHANGELOG.md)
 
 ## Install
 

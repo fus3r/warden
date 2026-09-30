@@ -1,4 +1,5 @@
 site_name: Warden
+site_url: https://warden.readthedocs.io/en/latest/
 site_description: A macOS menu bar app for Claude Code and Codex.
 repo_url: https://github.com/fus3r/warden
 repo_name: fus3r/warden
