@@ -129,8 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.center()
             tutorialWindow = window
         }
-        NSApp.activate()
-        tutorialWindow?.makeKeyAndOrderFront(nil)
+        showWindow(tutorialWindow)
     }
 
     @objc private func showSettings() {
@@ -142,8 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.center()
             settingsWindow = window
         }
-        NSApp.activate()
-        settingsWindow?.makeKeyAndOrderFront(nil)
+        showWindow(settingsWindow)
     }
 
     @objc private func showHistory() {
@@ -158,8 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             historyWindow = window
         }
         store.refreshHistory(soon: true)
-        NSApp.activate()
-        historyWindow?.makeKeyAndOrderFront(nil)
+        showWindow(historyWindow)
     }
 
     @objc private func showPlanner() {
@@ -177,7 +174,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             plannerWindow = window
         }
         store.refresh(usage: true)
-        NSApp.activate()
-        plannerWindow?.makeKeyAndOrderFront(nil)
+        showWindow(plannerWindow)
+    }
+
+    private func showWindow(_ window: NSWindow?) {
+        guard let window else { return }
+        // Let menu tracking finish before taking focus from the previously active app.
+        RunLoop.main.perform(inModes: [.default]) {
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            // Activation is asynchronous and may be declined; the requested window must still be visible.
+            window.orderFrontRegardless()
+        }
     }
 }
