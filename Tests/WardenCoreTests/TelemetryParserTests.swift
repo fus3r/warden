@@ -203,6 +203,18 @@ final class TelemetryParserTests: XCTestCase {
         XCTAssertEqual(SessionLiveness.running([abandoned, current, exact], processes: processes), ["new", "exact"])
     }
 
+    func testAClosedSessionDoesNotTakeTheProcessOfAnOpenSession() {
+        let now = Date()
+        let open = AgentSession(id: "open", provider: .claude, surface: "Terminal", cwd: "/tmp/app",
+                                phase: .working, updatedAt: now.addingTimeInterval(-600))
+        var closed = AgentSession(id: "closed", provider: .claude, surface: "Terminal", cwd: open.cwd,
+                                  phase: .idle, updatedAt: now)
+        closed.ended = true
+        let process = AgentProcess(id: 800, provider: .claude, surface: "Terminal", cwd: open.cwd)
+        XCTAssertEqual(SessionLiveness.running([open, closed], processes: [process]), ["open"])
+        XCTAssertTrue(SessionLiveness.running([closed], processes: [process]).isEmpty)
+    }
+
     func testCodexAccountLimitsFromAppServer() {
         let result: [String: Any] = [
             "rateLimits": ["limitId": "codex", "planType": "prolite",

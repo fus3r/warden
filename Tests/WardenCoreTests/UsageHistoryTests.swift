@@ -2,6 +2,28 @@ import XCTest
 @testable import WardenCore
 
 final class UsageHistoryTests: XCTestCase {
+    func testSeedingReplyClaimsKeepsUsageWhenTheSourceLogWasDeleted() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("history")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let now = ISO8601DateFormatter().date(from: "2026-09-30T12:00:00Z")!
+        var cursor = LedgerCursor(session: "deleted")
+        cursor.offset = 1000
+        cursor.records = [UsageRecord(day: "2026-09-29", provider: .claude, model: "claude-test", project: "/tmp/app",
+                                      usage: TokenUsage(input: 1000, output: 100, requests: 1))]
+        // A saved cursor from before reply claims existed, after Claude removed its source transcript.
+        let saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(cursor))
+        try JSONSerialization.data(withJSONObject: ["version": 1, "cursors": ["Claude/deleted.jsonl": saved]])
+            .write(to: directory.appendingPathComponent("usage-active.json"))
+        let account = AgentAccount(provider: .claude, folder: root.appendingPathComponent("claude"), name: nil)
+        let history = UsageHistory(directory: directory)
+        let migrated = history.update(accounts: [account], now: now)
+        XCTAssertEqual(migrated.records, cursor.records)
+        history.flush(now: now)
+        XCTAssertEqual(UsageHistory(directory: directory).update(accounts: [account], now: now).records, cursor.records)
+    }
+
     func testResumingAnArchivedCodexLogCountsOnlyNewUsageAfterRelaunch() throws {
         try checkResumedHistory(legacyArchive: false)
     }
@@ -81,6 +103,20 @@ final class UsageDuplicateTests: XCTestCase {
         let records = history.update(accounts: [account], now: now.addingTimeInterval(60)).records
         XCTAssertEqual(records.reduce(0) { $0 + $1.usage.requests }, 3)
         XCTAssertEqual(records.reduce(0) { $0 + $1.usage.output }, 50 + 60 + 70)
+
+        // Older histories counted both copies. Available logs must still be rebuilt during the claims migration.
+        var legacy: [String: Any] = [:]
+        for (name, lines) in [("s1.jsonl", original), ("s2.jsonl", branch)] {
+            var cursor = LedgerCursor(session: name)
+            UsageLedger.read(Data((lines.joined(separator: "\n") + "\n").utf8), provider: .claude, cursor: &cursor)
+            legacy["Claude/" + name] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(cursor))
+        }
+        try JSONSerialization.data(withJSONObject: ["version": 1, "cursors": legacy])
+            .write(to: directory.appendingPathComponent("usage-active.json"))
+        try FileManager.default.removeItem(at: directory.appendingPathComponent("usage-replies.json"))
+        let migrated = UsageHistory(directory: directory).update(accounts: [account], now: now.addingTimeInterval(120)).records
+        XCTAssertEqual(migrated.reduce(0) { $0 + $1.usage.requests }, 3)
+        XCTAssertEqual(migrated.reduce(0) { $0 + $1.usage.output }, 50 + 60 + 70)
     }
 
     func testTheEntryOfAReplyWithTheMostTokensCounts() {

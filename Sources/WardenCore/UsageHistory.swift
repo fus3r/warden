@@ -194,6 +194,7 @@ public final class UsageHistory: @unchecked Sendable {
         let files = roots(accounts).filter { $0.0 == .claude }.flatMap { root in
             logs(in: root.1, since: since).map { (file: $0.0, account: root.2) }
         }
+        var replayed = Set<String>()
         for settledFirst in [true, false] {
             for (file, account) in files {
                 let key = "\(AgentProvider.claude.rawValue)/\(file.lastPathComponent)"
@@ -201,11 +202,14 @@ public final class UsageHistory: @unchecked Sendable {
                 let known = settledFirst ? settled : active.cursors[key]?.offset
                 guard let known, known > 0 else { continue }
                 var replay = LedgerCursor(session: Self.session(of: file, provider: .claude), account: account)
-                _ = read(file, provider: .claude, cursor: &replay, through: known,
-                         claim: { [unowned self] in self.claim($0, log: key, day: day, settled: settledFirst) })
+                if read(file, provider: .claude, cursor: &replay, through: known,
+                        claim: { [unowned self] in self.claim($0, log: key, day: day, settled: settledFirst) }), !settledFirst {
+                    replayed.insert(key)
+                }
             }
         }
-        for key in active.cursors.keys where key.hasPrefix("\(AgentProvider.claude.rawValue)/") {
+        // Keep saved use when its source log is gone or unreadable; the normal update settles it into the archive.
+        for key in replayed {
             active.cursors.removeValue(forKey: key)
         }
         seen = [:]

@@ -16,7 +16,7 @@ public enum SessionLiveness {
             guard let cwd = process.cwd, cwd != "/" else { continue }
             slots["\(process.provider.rawValue):\(cwd)", default: 0] += 1
         }
-        for session in sessions.sorted(by: { $0.updatedAt > $1.updatedAt }) where session.host?.pid == nil {
+        for session in sessions.sorted(by: { $0.updatedAt > $1.updatedAt }) where !session.ended && session.host?.pid == nil {
             let key = "\(session.provider.rawValue):\(session.cwd)"
             guard let free = slots[key], free > 0 else { continue }
             slots[key] = free - 1
