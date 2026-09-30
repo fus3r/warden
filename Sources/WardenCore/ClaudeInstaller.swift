@@ -112,7 +112,13 @@ public enum ClaudeInstaller {
         return value.isEmpty ? nil : value
     }
 
-    private static func quoted(_ helper: URL) -> String { "\"\(helper.path)\"" }
+    private static func quoted(_ helper: URL) -> String {
+        let path = helper.path.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "$", with: "\\$")
+            .replacingOccurrences(of: "`", with: "\\`")
+        return "\"\(path)\""
+    }
 
     private static func wardenCommands(in groups: Any?) -> [String] {
         (groups as? [[String: Any]] ?? []).flatMap { group in

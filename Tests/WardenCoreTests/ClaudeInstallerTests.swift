@@ -77,6 +77,32 @@ final class ClaudeInstallerTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: settings), broken)
     }
 
+    func testHookCommandsRunTheLiteralHelperPath() throws {
+        let helper = try makeHelper("Warden's $WARDEN_TEST_PATH `printf changed` \"preview\" \\.app")
+        try Data("#!/bin/sh\nprintf '%s\\n' \"$1\"\n".utf8).write(to: helper)
+        try ClaudeInstaller.install(helper: helper, settingsURL: settings)
+        let root = try read()
+        let status = try XCTUnwrap((root["statusLine"] as? [String: Any])?["command"] as? String)
+        let event = try XCTUnwrap(stopCommands(root).first)
+
+        for (command, argument) in [(status, "claude-status"), (event, "claude-event")] {
+            let process = Process()
+            let output = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = ["-c", command]
+            process.environment = ["WARDEN_TEST_PATH": "expanded"]
+            process.standardInput = FileHandle.nullDevice
+            process.standardOutput = output
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            XCTAssertEqual(process.terminationStatus, 0)
+            XCTAssertEqual(String(decoding: data, as: UTF8.self), argument + "\n")
+        }
+        XCTAssertEqual(ClaudeInstaller.status(helper: helper, settingsURL: settings), .connected)
+    }
+
     private func makeHelper(_ app: String) throws -> URL {
         let url = folder.appendingPathComponent("\(app)/Contents/Helpers/WardenBridge")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

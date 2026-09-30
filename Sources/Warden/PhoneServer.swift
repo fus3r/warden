@@ -41,8 +41,8 @@ final class PhoneServer: @unchecked Sendable {
         let connection: NWConnection
         var buffer = Data()
         var timer: DispatchSourceTimer?
-        /// A state request held until the state moves past this version.
-        var held: Int?
+        /// A state request held until the state moves past this version, with the device that authenticated it.
+        var held: (version: Int, device: String)?
         init(_ connection: NWConnection) { self.connection = connection }
     }
 
@@ -66,7 +66,7 @@ final class PhoneServer: @unchecked Sendable {
         queue.async {
             self.state = data
             self.version = version
-            for (key, client) in self.clients where client.held != nil && client.held != version {
+            for (key, client) in self.clients where client.held != nil && client.held?.version != version {
                 client.held = nil
                 self.respond(key, .json(data), keepAlive: true)
             }
@@ -82,10 +82,16 @@ final class PhoneServer: @unchecked Sendable {
     }
 
     func forget(device id: String) {
-        queue.async {
-            self.devices.removeAll { $0.id == id }
-            self.saveDevices()
+        queue.async { self.removeDevice(id) }
+    }
+
+    private func removeDevice(_ id: String) {
+        devices.removeAll { $0.id == id }
+        for (key, client) in clients where client.held?.device == id {
+            client.held = nil
+            respond(key, .unpaired, keepAlive: false)
         }
+        saveDevices()
     }
 
     /// Paired devices from disk, read on the queue that uses them.
@@ -225,9 +231,9 @@ final class PhoneServer: @unchecked Sendable {
         }
         switch (request.method, request.path) {
         case ("GET", "/api/state"):
-            guard authenticate(request) != nil else { return respond(key, .unpaired, keepAlive: keepAlive) }
+            guard let device = authenticate(request) else { return respond(key, .unpaired, keepAlive: keepAlive) }
             if let since = request.query["since"].flatMap(Int.init), since == version {
-                clients[key]?.held = since
+                clients[key]?.held = (since, device.id)
                 arm(key, seconds: Self.pollSeconds)
             } else {
                 respond(key, .json(state), keepAlive: keepAlive)
@@ -251,8 +257,7 @@ final class PhoneServer: @unchecked Sendable {
         case ("POST", "/api/unpair"):
             guard sameOrigin(request) else { return respond(key, .status(403, "Forbidden"), keepAlive: false) }
             if let device = authenticate(request) {
-                devices.removeAll { $0.id == device.id }
-                saveDevices()
+                removeDevice(device.id)
             }
             var response = Response.json(Data(#"{"ok":true}"#.utf8))
             response.headers.append(("Set-Cookie", PhonePairing.clearCookie))
