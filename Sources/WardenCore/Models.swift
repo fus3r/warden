@@ -107,6 +107,7 @@ public struct PlanDetails: Equatable {
     public var resetsExpire: [Date] = []
     /// The account, such as "work". Nil for the default account.
     public var account: String?
+    public var observedAt = Date()
 
     public init(provider: AgentProvider, plan: String?, credits: String? = nil, unlimitedCredits: Bool = false, resets: Int = 0) {
         self.provider = provider

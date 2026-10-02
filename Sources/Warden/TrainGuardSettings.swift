@@ -5,6 +5,7 @@ import WardenCore
 struct TrainGuardSettings: View {
     @ObservedObject var setup: TrainGuardSetup
     let accounts: [AgentAccount]
+    @State private var overrideUntil = Date().addingTimeInterval(3600)
 
     var body: some View {
         LabeledContent {
@@ -42,6 +43,50 @@ struct TrainGuardSettings: View {
         }
         Text("Only jobs started with train-guard run or attached to train-guard are supervised. Agent instructions ask agents to use it; they do not automatically capture every job. Lower priority is a scheduling hint, not a power limit.")
             .font(.caption).foregroundStyle(.secondary)
+        if setup.install != .none {
+            TimelineView(.periodic(from: .now, by: 15)) { context in
+                let control = TrainGuard(home: setup.home)
+                let exception = control.globalOverride(now: context.date)
+                LabeledContent {
+                    HStack {
+                        Menu("Ignore All Jobs") {
+                            ForEach([30, 60, 240], id: \.self) { minutes in
+                                Button(minutes < 60 ? "For \(minutes) Minutes" : "For \(minutes / 60) \(minutes == 60 ? "Hour" : "Hours")") {
+                                    setup.ignoreAll(until: Date().addingTimeInterval(Double(minutes) * 60))
+                                }
+                            }
+                            Button("Until a Date…") { setup.choosingOverrideEnd = true }
+                            Button("Until Turned Back On") { setup.ignoreAll() }
+                        }
+                        .disabled(!control.supportsGlobalControl || setup.isBusy)
+                        if exception != nil {
+                            Button("End Exception") { setup.resumeGuarding() }.disabled(setup.isBusy)
+                        }
+                    }
+                    .fixedSize()
+                } label: {
+                    SettingLabel("All supervised jobs", detail: exception.map {
+                        $0.expiresAt.map { "Full speed until \($0.formatted(date: .abbreviated, time: .shortened))." }
+                            ?? "Full speed until you end this exception."
+                    } ?? "Following the usual policy and any per-session exceptions.")
+                }
+            }
+            Text("Includes current and future jobs, even without a chat owner, and allows full speed on battery. Timed exceptions expire even when Warden is closed. Per-session exceptions stay as chosen; legacy shell jobs keep their own policy.")
+                .font(.caption).foregroundStyle(.secondary)
+            if !TrainGuard(home: setup.home).supportsGlobalControl {
+                Text("Update or migrate train-guard to use exceptions for all jobs.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if setup.choosingOverrideEnd {
+                DatePicker("Run at full speed until", selection: $overrideUntil, in: Date()...,
+                           displayedComponents: [.date, .hourAndMinute])
+                HStack {
+                    Button("Apply") { setup.ignoreAll(until: overrideUntil) }
+                        .disabled(overrideUntil <= Date() || setup.isBusy)
+                    Button("Cancel") { setup.choosingOverrideEnd = false }
+                }
+            }
+        }
         if setup.install != .none, !setup.files.isEmpty {
             LabeledContent {
                 if setup.files.contains(where: { !$0.mentions }) {

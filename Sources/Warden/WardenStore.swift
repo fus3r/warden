@@ -131,6 +131,7 @@ final class WardenStore: ObservableObject {
     /// No cookies, cache, or credentials: status pages need none.
     private static let statusSession = URLSession(configuration: .ephemeral)
     let keepAwake = KeepAwake()
+    let resetReminders = ResetReminders()
     private var timer: Timer?
     private var isScanning = false
     private var usageRequested = false
@@ -171,6 +172,8 @@ final class WardenStore: ObservableObject {
             "automationsEnabled": false,
             "checkProviderStatus": false,
             "keepAwake": false,
+            "alertResetExpiry": true,
+            "alertResetExpiryLeadHours": 24.0,
             "alertUnused": false,
             "dailyBudget": 0.0,
             "menuShowsUsage": true,
@@ -568,9 +571,13 @@ final class WardenStore: ObservableObject {
     private func publishToPhone() {
         let state = phone.enabled ? PhoneState.make(store: self, mac: PhoneCompanion.macName) : nil
         let waiting = phone.pairedCount > 0 && (state?.needsYou.contains { !($0.prompt?.choices.isEmpty ?? true) } ?? false)
+        let guardState = TrainGuard(home: trainGuard.home)
         keepAwake.update(working: activeCount > 0,
-                         guardedJobs: !TrainGuard(home: trainGuard.home).workingJobs().isEmpty,
-                         phoneAwaitingReply: waiting, observedAt: scannedAt ?? .distantPast)
+                         guardedJobs: !guardState.workingJobs().isEmpty,
+                         phoneAwaitingReply: waiting,
+                         unfinishedWork: attentionCount > 0 || !approvals.isEmpty
+                            || !guardState.runningPackageGuards().isEmpty || !guardState.runningScriptGuards().isEmpty,
+                         observedAt: scannedAt ?? .distantPast)
         if phone.isServing, let state { phone.publish(state) }
     }
 
@@ -837,6 +844,8 @@ final class WardenStore: ObservableObject {
                            windows: windows, previousWindows: previousWindows,
                            styles: sessionStyles, mode: alertMode, snoozed: snoozedUntil != nil)
         }
+        alerts.resetExpiry(resetReminders.available(plans: plans, accounts: accounts),
+                           mode: alertMode, snoozed: snoozedUntil != nil)
         releaseAnsweredApprovals()
         writeState()
         publishToPhone()
@@ -897,6 +906,9 @@ final class AlertEngine: NSObject, UNUserNotificationCenterDelegate {
                 UNNotificationAction(identifier: "mute", title: "Mute Session", options: [])
             ], intentIdentifiers: []),
             UNNotificationCategory(identifier: "approval", actions: [allow, deny], intentIdentifiers: []),
+            UNNotificationCategory(identifier: "reset-reminder", actions: [
+                UNNotificationAction(identifier: "openUsage", title: "Open Usage", options: [.foreground])
+            ], intentIdentifiers: []),
             UNNotificationCategory(identifier: "approval-session", actions: [allow, session, deny], intentIdentifiers: [])
         ]
         center.setNotificationCategories(Set(categories))
@@ -1216,15 +1228,35 @@ final class AlertEngine: NSObject, UNUserNotificationCenterDelegate {
              about: session)
     }
 
-    /// Delivers an alert once per key. Automation scripts get every alert, including those that snooze, quiet hours,
-    /// or Only When Needed keep silent; a muted session gets none.
+    /// Reminders open Usage; activating a reset remains an explicit provider action.
+    func resetExpiry(_ reminders: [ResetReminder], mode: AlertMode, snoozed: Bool, now: Date = Date()) {
+        self.snoozed = snoozed
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: "alertResetExpiry") else { return }
+        let lead = defaults.object(forKey: "alertResetExpiryLeadHours") as? Double ?? 24
+        for reminder in reminders {
+            guard let key = reminder.alertKey(now: now, leadHours: lead) else { continue }
+            let style = AlertStyle.general(for: reminder.provider)
+            let expiry = reminder.expiresAt.formatted(date: .abbreviated, time: reminder.source == .manual ? .omitted : .shortened)
+            let source = reminder.source == .provider ? "Reported by the \(reminder.provider.rawValue) CLI."
+                : "Saved from the expiry date you entered. Check that the reset is still available."
+            // A reset reminder needs its expiry and Usage action visible even with the Voice style.
+            send(style: style == .voice ? .both : style, kind: .quota, mode: mode, line: .warning,
+                 title: "\(reminder.name) \(reminder.title.lowercased()) expires soon",
+                 body: "\(reminder.source == .manual ? "Use before" : "Expires") \(expiry). Open Usage to activate it. \(source)",
+                 session: nil, key: key, category: "reset-reminder", usageURL: reminder.usageURL,
+                 provider: reminder.provider, account: reminder.account)
+        }
+    }
+
+    /// Delivers an alert once per key. Automation scripts also receive alerts that stay silent.
     private func send(style: AlertStyle, kind: Kind, mode: AlertMode, line: VoiceLine, title: String, body: String, script: String? = nil,
                       session: String?, key: String, category: String = "session", approval: String? = nil,
-                      about: AgentSession? = nil) {
+                      about: AgentSession? = nil, usageURL: URL? = nil, provider: AgentProvider? = nil, account: String? = nil) {
         guard style != .muted, !alertedKeys.contains(key) else { return }
         // Alerts about a lasting state, such as a pace or a session's share of a window, would come again after a
         // relaunch while the state lasts; their keys are kept.
-        let lasting = ["pace-", "heavy-", "upcoming-", "drain-", "unused-", "budget-", "moved-"].contains(where: key.hasPrefix)
+        let lasting = ["pace-", "heavy-", "upcoming-", "drain-", "unused-", "budget-", "moved-", "reset-expiry-"].contains(where: key.hasPrefix)
         let defaults = UserDefaults.standard
         let kept = defaults.stringArray(forKey: "alertedOnce") ?? []
         if lasting, kept.contains(key) {
@@ -1235,7 +1267,7 @@ final class AlertEngine: NSObject, UNUserNotificationCenterDelegate {
         if postedKeys.count > 500 { postedKeys.removeAll(keepingCapacity: true) }
         if postedKeys.insert(key).inserted {
             onEvent?(AutomationEvent(event: AutomationEvent.name(forAlert: key), at: Date(), title: title, message: script ?? body,
-                                     session: session, agent: about?.provider.rawValue, account: about?.account,
+                                     session: session, agent: about?.provider.rawValue ?? provider?.rawValue, account: about?.account ?? account,
                                      project: about?.cwd, alerted: deliver))
         }
         guard deliver else { return }
@@ -1253,6 +1285,9 @@ final class AlertEngine: NSObject, UNUserNotificationCenterDelegate {
                 content.categoryIdentifier = category
                 content.threadIdentifier = session
                 content.userInfo = ["session": session, "approval": approval ?? ""]
+            } else if let usageURL {
+                content.categoryIdentifier = category
+                content.userInfo = ["usageURL": usageURL.absoluteString]
             } else {
                 content.userInfo = ["open": "menu"]
             }
@@ -1281,8 +1316,12 @@ final class AlertEngine: NSObject, UNUserNotificationCenterDelegate {
         let session = response.notification.request.content.userInfo["session"] as? String
         let approval = response.notification.request.content.userInfo["approval"] as? String ?? ""
         let opensMenu = response.notification.request.content.userInfo["open"] as? String == "menu"
+        let usageURL = response.notification.request.content.userInfo["usageURL"] as? String
         let action = response.actionIdentifier
         Task { @MainActor in
+            if let usageURL, action == UNNotificationDefaultActionIdentifier || action == "openUsage",
+               ["https://claude.ai/new#settings/usage", "https://chatgpt.com/codex/settings/usage"].contains(usageURL),
+               let url = URL(string: usageURL) { NSWorkspace.shared.open(url) }
             if session == nil, opensMenu, action == UNNotificationDefaultActionIdentifier { self.onOpenMenu?() }
             if let session {
                 switch action {

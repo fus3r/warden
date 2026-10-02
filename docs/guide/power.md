@@ -25,6 +25,12 @@ This optional service temporarily applies `pmset -a disablesleep 1`, which also 
 
 Registration, macOS approval, and active protection are separate states. If the service stops confirming protection, Warden stops showing it as active. Preview and ad-hoc builds cannot authorize it.
 
+### Sleep after the work finishes
+
+Enable **Sleep when all prompts are done** in Power settings or the Keep Awake submenu. With the lid closed, Warden waits until no agent is working, no prompt waits for you, and no supervised job remains, then counts 30 quiet seconds. New work cancels the countdown.
+
+A fresh activity scan must confirm completion. Warden releases its idle assertion and waits for the power service to confirm normal sleep before requesting sleep. Opening the lid or turning the option off cancels automatic sleep. The option is off by default.
+
 ## Restore normal sleep
 
 Turn protection off, let the work finish, or quit Warden. **Remove Power Service** restores sleep before unregistering the service; a timeout is reported if restoration cannot be confirmed.

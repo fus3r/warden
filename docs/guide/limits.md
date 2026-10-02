@@ -33,6 +33,12 @@ The provider's CLI uses its own sign-in and contacts its service. Warden does no
 
 Claude Code marks its usage request experimental. Warden reads the supported fields for shared windows, model-specific windows, and extra usage. See [Sources and privacy](../reference/privacy.md) for full coverage.
 
+## Use a reset before it expires
+
+**Settings → General → Unused reset about to expire** enables a reminder 1 day, 3 days, or 1 week before expiry, plus a final reminder in the last hour. **Open Usage** on the notification opens the provider's redemption page. Reminders include a notification even with the Voice style, and follow the usual sound, snooze, quiet hours, and alert mode choices; Warden never spends a reset automatically.
+
+Codex reports banked resets and their expiry through its CLI. Alerts require a reading less than 15 minutes old. Claude Code's usage response does not include reset offers. In **Settings → Usage → Reset Reminders**, enter the expiry date shown on Claude's Usage page. These local reminders are labeled as entered dates; remove one after redeeming the reset or if the offer disappears. For a date without a time, Warden reminds you before that date starts.
+
 ## Prompt cache
 
 For a waiting Claude session with a large context, Warden can show a deadline such as **Reply within 22 min to keep its cache**. Recent Sessions can show **Cache 41 min** or **Cache expired**.

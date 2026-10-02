@@ -3,6 +3,36 @@ import XCTest
 @testable import WardenCore
 
 final class KeepAwakeTests: XCTestCase {
+    func testSleepAfterWorkRequiresObservedProtectionAndFreshQuietTime() {
+        var sleep = SleepAfterWork()
+        func update(_ time: TimeInterval, busy: Bool = false, fresh: Bool = true, protected: Bool = true,
+                    enabled: Bool = true, closed: Bool = true) -> Bool {
+            sleep.update(enabled: enabled, lidClosed: closed, busy: busy, fresh: fresh, protected: protected, now: time)
+        }
+        XCTAssertFalse(update(0), "Starting Warden on an idle Mac must not put it to sleep.")
+        XCTAssertFalse(update(1, busy: true, protected: false))
+        XCTAssertFalse(update(40), "An unconfirmed power service cannot arm automatic sleep.")
+        XCTAssertFalse(update(41, busy: true))
+        XCTAssertFalse(update(42))
+        XCTAssertFalse(update(70))
+        XCTAssertFalse(update(71, busy: true), "Another turn, waiting prompt or supervised job cancels the countdown.")
+        XCTAssertFalse(update(72))
+        XCTAssertFalse(update(100, fresh: false), "A stalled activity scan is not completion evidence.")
+        XCTAssertFalse(update(101))
+        XCTAssertFalse(update(130))
+        XCTAssertFalse(sleep.update(enabled: true, lidClosed: true, busy: false, fresh: true, protected: true,
+                                    now: 131, observedAt: 130), "The activity scan must confirm the end of the quiet period.")
+        XCTAssertTrue(update(131))
+        sleep.reset()
+        XCTAssertFalse(update(200), "A completed sleep request is not repeated while the Mac remains idle.")
+        XCTAssertFalse(update(201, busy: true))
+        XCTAssertFalse(update(202, closed: false))
+        XCTAssertFalse(update(250), "Opening the lid cancels the unattended work period.")
+        XCTAssertFalse(update(251, busy: true))
+        XCTAssertFalse(update(252, enabled: false))
+        XCTAssertFalse(update(300))
+    }
+
     func testWorkPowerAndBatteryReserve() {
         func policy(enabled: Bool = true, working: Bool = true, fresh: Bool = true,
                     battery: Bool = false, adapter: Bool = false, percent: Int? = 80) -> KeepAwakePolicy {

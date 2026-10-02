@@ -4,8 +4,13 @@ import Foundation
 /// battery is warm. Its Python package, from 0.5, keeps each job in `~/.train-guard` as JSON; the earlier shell script
 /// keeps them in `~/.claude/tools/train-guard`. Each job records the agent session that started it, from the session id
 /// Claude Code and Codex give the commands they run, and train-guard runs the jobs of the agents listed in
-/// `ignored-agents` at full speed. Warden edits that list and reads what the guards do; it never touches a job.
+/// `ignored-agents` at full speed. A global override also covers jobs without an agent and future jobs.
+/// Warden edits the override files and reads what the guards do; it never touches a job.
 public struct TrainGuard {
+    public struct GlobalOverride: Equatable {
+        public var expiresAt: Date?
+        public init(expiresAt: Date?) { self.expiresAt = expiresAt }
+    }
     /// A job train-guard supervises now.
     public struct Job: Equatable {
         public var name: String
@@ -40,15 +45,56 @@ public struct TrainGuard {
 
     public var isInstalled: Bool { hasScript || command != nil }
 
+    private var packageVersion: String? {
+        // The self-contained command links into TrainGuard.app; its version belongs to the enclosing environment.
+        if let environment = TrainGuardPackage.currentEnvironment(home: home) {
+            return TrainGuardPackage.installedVersion(in: environment)
+        }
+        guard let command else { return nil }
+        return TrainGuardPackage.installedVersion(in: command.resolvingSymlinksInPath()
+            .deletingLastPathComponent().deletingLastPathComponent())
+    }
+
     /// Do not offer an ineffective override for the published 0.4 package or an unmodified old script.
     public var supportsSessionControl: Bool {
-        if let command,
-           let version = TrainGuardPackage.installedVersion(in: command.resolvingSymlinksInPath().deletingLastPathComponent().deletingLastPathComponent()),
-           !TrainGuardPackage.isOlder(version) { return true }
+        if let version = packageVersion,
+           version == "0.5.0" || version.compare("0.5.0.dev0", options: .numeric) != .orderedAscending { return true }
         if hasScript,
            let script = try? String(contentsOf: scriptFolder.appendingPathComponent("train-guard.sh"), encoding: .utf8),
            script.contains("ignored-agents"), script.contains("AGENT=") { return true }
         return false
+    }
+
+    /// General exceptions require the package version that implements them; legacy guards keep their own policy.
+    public var supportsGlobalControl: Bool {
+        guard let version = packageVersion else { return false }
+        return version == "0.5.0.dev1" || version.compare("0.5.1", options: .numeric) != .orderedAscending
+    }
+
+    private var globalFile: URL { packageFolder.appendingPathComponent("global-override.json") }
+
+    public func globalOverride(now: Date = Date()) -> GlobalOverride? {
+        guard let value = Self.object(globalFile), value["schema_version"] as? Int == 1,
+              value["enabled"] as? Bool == true else { return nil }
+        if value["expires_at"] is NSNull { return GlobalOverride(expiresAt: nil) }
+        guard let seconds = value["expires_at"] as? Double, seconds.isFinite,
+              seconds > now.timeIntervalSince1970 else { return nil }
+        return GlobalOverride(expiresAt: Date(timeIntervalSince1970: seconds))
+    }
+
+    /// Does not rewrite the owner's policy or per-session exceptions. Expiry is enforced by each supervisor.
+    public func setGlobalOverride(_ enabled: Bool, until: Date? = nil) throws {
+        if !enabled {
+            if FileManager.default.fileExists(atPath: globalFile.path) { try FileManager.default.removeItem(at: globalFile) }
+            return
+        }
+        guard until.map({ $0.timeIntervalSince1970.isFinite && $0 > Date() }) ?? true else {
+            throw PowerError("Choose an end time in the future.")
+        }
+        let value: [String: Any] = ["schema_version": 1, "enabled": true,
+                                    "expires_at": until.map { $0.timeIntervalSince1970 as Any } ?? NSNull()]
+        try FileManager.default.createDirectory(at: packageFolder, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]).write(to: globalFile, options: .atomic)
     }
 
     /// The lists that apply: the package's, and the script's when it is installed.

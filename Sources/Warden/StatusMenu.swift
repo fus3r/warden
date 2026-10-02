@@ -223,6 +223,16 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             self?.store.keepAwake.refresh()
         }
         submenu.addItem(toggle)
+        let done = NSMenuItem(title: "Sleep When All Prompts Are Done", action: #selector(runViewAction(_:)), keyEquivalent: "")
+        done.target = self
+        done.state = UserDefaults.standard.bool(forKey: "sleepWhenAgentsDone") ? .on : .off
+        done.isEnabled = UserDefaults.standard.bool(forKey: "keepAwake") && UserDefaults.standard.bool(forKey: "keepAwakeClosedLid")
+        done.representedObject = ViewAction { [weak self] in
+            let defaults = UserDefaults.standard
+            defaults.set(!defaults.bool(forKey: "sleepWhenAgentsDone"), forKey: "sleepWhenAgentsDone")
+            self?.store.keepAwake.refresh()
+        }
+        submenu.addItem(done)
         submenu.addItem(.separator())
         let settings = NSMenuItem(title: "Power Settings…", action: #selector(runViewAction(_:)), keyEquivalent: "")
         settings.target = self
@@ -432,16 +442,68 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     /// what train-guard does with them now.
     private func trainGuardItem(for sessions: [AgentSession]) -> NSMenuItem? {
         let trainGuard = TrainGuard(home: store.trainGuard.home)
-        guard !sessions.isEmpty, trainGuard.supportsSessionControl else { return nil }
+        guard trainGuard.supportsSessionControl || trainGuard.supportsGlobalControl else { return nil }
         let ignored = trainGuard.ignoredAgents()
         let jobs = Dictionary(grouping: trainGuard.jobs(), by: \.agent)
         let item = NSMenuItem(title: "Ignore train-guard", action: nil, keyEquivalent: "")
         let chosen = sessions.filter { ignored.contains($0.id) }.map { $0.title ?? $0.project }
-        setSubtitle(item, MenuFormat.fit(chosen.isEmpty ? "No agent ignored" : "Full speed for " + chosen.joined(separator: ", "),
+        let exception = trainGuard.globalOverride()
+        let summary = exception.map {
+            $0.expiresAt.map { "All jobs until \(MenuFormat.time($0))" } ?? "All jobs until turned back on"
+        } ?? (chosen.isEmpty ? "No agent ignored" : "Full speed for " + chosen.joined(separator: ", "))
+        setSubtitle(item, MenuFormat.fit(summary,
                                          width: 222, font: subtitleFont))
-        item.toolTip = "train-guard pauses long jobs on battery and lowers their priority while the battery is warm. The jobs a checked agent starts under train-guard run at full speed instead, on battery too."
+        item.toolTip = "Let all supervised jobs, or a chosen session's jobs, run at full speed, including on battery. Timed exceptions end automatically. Per-session exceptions stay as chosen. Legacy shell jobs keep their own policy."
         let submenu = NSMenu()
         submenu.autoenablesItems = false
+        submenu.addItem(.sectionHeader(title: "All Supervised Jobs"))
+        for minutes in [30, 60, 240] {
+            let title = minutes < 60 ? "For \(minutes) Minutes" : "For \(minutes / 60) \(minutes == 60 ? "Hour" : "Hours")"
+            let option = NSMenuItem(title: title, action: #selector(runViewAction(_:)), keyEquivalent: "")
+            option.target = self
+            option.isEnabled = trainGuard.supportsGlobalControl
+            option.representedObject = ViewAction { [weak self] in
+                self?.store.trainGuard.ignoreAll(until: Date().addingTimeInterval(Double(minutes) * 60))
+                self?.store.objectWillChange.send()
+            }
+            submenu.addItem(option)
+        }
+        let until = NSMenuItem(title: "Until a Date…", action: #selector(runViewAction(_:)), keyEquivalent: "")
+        until.target = self
+        until.isEnabled = trainGuard.supportsGlobalControl
+        until.representedObject = ViewAction { [weak self] in
+            self?.store.trainGuard.choosingOverrideEnd = true
+            UserDefaults.standard.set("general", forKey: "settingsTab")
+            self?.openSettings()
+        }
+        submenu.addItem(until)
+        let forever = NSMenuItem(title: "Until Turned Back On", action: #selector(runViewAction(_:)), keyEquivalent: "")
+        forever.target = self
+        forever.isEnabled = trainGuard.supportsGlobalControl
+        forever.state = exception != nil && exception?.expiresAt == nil ? .on : .off
+        forever.representedObject = ViewAction { [weak self] in
+            self?.store.trainGuard.ignoreAll()
+            self?.store.objectWillChange.send()
+        }
+        submenu.addItem(forever)
+        let resume = NSMenuItem(title: "End All-Jobs Exception", action: #selector(runViewAction(_:)), keyEquivalent: "")
+        resume.target = self
+        resume.isEnabled = exception != nil
+        resume.representedObject = ViewAction { [weak self] in
+            self?.store.trainGuard.resumeGuarding()
+            self?.store.objectWillChange.send()
+        }
+        submenu.addItem(resume)
+        if !trainGuard.supportsGlobalControl {
+            let update = NSMenuItem(title: "Update in Settings…", action: #selector(runViewAction(_:)), keyEquivalent: "")
+            update.target = self
+            update.representedObject = ViewAction { [weak self] in
+                UserDefaults.standard.set("general", forKey: "settingsTab")
+                self?.openSettings()
+            }
+            submenu.addItem(update)
+        }
+        if !sessions.isEmpty { submenu.addItem(.separator()); submenu.addItem(.sectionHeader(title: "By Session")) }
         for session in sessions {
             let isIgnored = ignored.contains(session.id)
             let option = NSMenuItem(title: name(of: session), action: #selector(runViewAction(_:)), keyEquivalent: "")

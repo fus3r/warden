@@ -4,7 +4,16 @@
 
 Requires Xcode command-line tools with Swift 5.10 or later, and a universal Python installation to package train-guard. The runtime build uses PyInstaller 6.22.3 and psutil 7.2.2; Python 3.13.7 from python.org was used for this release.
 
-Use the exact train-guard wheel published with this beta. It contains the Python source and MIT license; its SHA-256 is recorded in `SHA256SUMS.txt` and `manifest.json`.
+For the current source checkout, build the compatible train-guard version from [its public repository](https://github.com/fus3r/train-guard). Python's `build` module must be installed. The checkout must declare the version in `Sources/WardenCore/TrainGuardInstall.swift`, currently `0.5.1.dev0`.
+
+```sh
+git clone https://github.com/fus3r/train-guard.git ../train-guard-source
+export WARDEN_TRAIN_GUARD_SOURCE="$PWD/../train-guard-source"
+train-guard run --name warden-build -- ./Scripts/build-app.sh
+open build/Warden.app
+```
+
+For the released **v0.4.0-beta.7** source tag, use its published wheel. It contains the Python source and MIT license; its SHA-256 is recorded in `SHA256SUMS.txt` and `manifest.json`.
 
 ```sh
 mkdir -p build/dependencies

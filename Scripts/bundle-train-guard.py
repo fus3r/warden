@@ -38,11 +38,16 @@ with zipfile.ZipFile(wheel) as package:
         raise SystemExit("train-guard wheel metadata does not match Warden's integration version")
     if "trainguard/agents.py" not in package.namelist():
         raise SystemExit("train-guard wheel is missing session integration")
+    if b"def global_ignored(" not in package.read("trainguard/agents.py"):
+        raise SystemExit("train-guard wheel is missing timed all-jobs exceptions")
 if check_only:
     print(f"Verified train-guard {version}: {hashlib.sha256(wheel.read_bytes()).hexdigest()}")
     raise SystemExit(0)
 destination = Path(sys.argv[1])
 destination.mkdir(parents=True, exist_ok=True)
+for old in destination.glob("train_guard-*.whl"):
+    if old.name != filename:
+        old.unlink()
 shutil.copy2(wheel, destination / filename)
 (destination / "wheel.sha256").write_text(hashlib.sha256(wheel.read_bytes()).hexdigest() + "\n")
 print(f"Bundled train-guard {version} with SHA-256 verification")

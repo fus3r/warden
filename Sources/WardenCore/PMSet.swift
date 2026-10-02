@@ -1,6 +1,6 @@
 import Foundation
 
-/// The only privileged operation exposed by Warden: a fixed pmset setting, with no client-supplied arguments.
+/// Fixed macOS power operations, with no client-supplied arguments.
 public enum PMSet {
     public static func sleepDisabled(in output: String) throws -> Bool {
         for line in output.split(separator: "\n") {
@@ -22,6 +22,8 @@ public enum PMSet {
     public static func writeSleepDisabled(_ value: Bool) throws {
         _ = try run(["-a", "disablesleep", value ? "1" : "0"])
     }
+
+    public static func sleepNow() throws { _ = try run(["sleepnow"]) }
 
     private static func run(_ arguments: [String]) throws -> String {
         let process = Process()

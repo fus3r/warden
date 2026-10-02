@@ -9,6 +9,8 @@ struct WardenSettings: View {
     @AppStorage("alertFinish") private var alertFinish = true
     @AppStorage("alertContext") private var alertContext = true
     @AppStorage("alertQuota") private var alertQuota = true
+    @AppStorage("alertResetExpiry") private var alertResetExpiry = true
+    @AppStorage("alertResetExpiryLeadHours") private var resetExpiryLead = 24.0
     @AppStorage("contextThreshold") private var contextThreshold = 85.0
     @AppStorage("soundCodex") private var soundCodex = "chime"
     @AppStorage("soundClaude") private var soundClaude = "chime"
@@ -84,6 +86,9 @@ struct WardenSettings: View {
 
     private var usage: some View {
         Form {
+            Section("Reset Reminders") {
+                ResetRemindersSettings(reminders: store.resetReminders, accounts: store.accounts, plans: store.plans)
+            }
             Section("History") {
                 Toggle(isOn: Binding(get: { historyEnabled }, set: { value in
                     historyEnabled = value
@@ -129,6 +134,14 @@ struct WardenSettings: View {
     }
 
     private var general: some View {
+        ScrollViewReader { reader in
+            generalForm.onReceive(store.trainGuard.$choosingOverrideEnd) { choosing in
+                if choosing { DispatchQueue.main.async { reader.scrollTo("long-jobs", anchor: .top) } }
+            }
+        }
+    }
+
+    private var generalForm: some View {
         Form {
             Section("Sources") {
                 LabeledContent {
@@ -193,6 +206,7 @@ struct WardenSettings: View {
             Section("Long Jobs") {
                 TrainGuardSettings(setup: store.trainGuard, accounts: store.accounts)
             }
+            .id("long-jobs")
             .onAppear { store.trainGuard.refresh(accounts: store.accounts) }
             Section("Alerts") {
                 Toggle(isOn: $alertAttention) {
@@ -219,6 +233,17 @@ struct WardenSettings: View {
                 Toggle(isOn: $alertQuota) {
                     SettingLabel("Usage limits and observed resets",
                                  detail: "A limit passes the level below, resets within 30 minutes while above 80%, or shows available capacity in a fresh reading after its reset, naming the sessions it stopped. Separate alerts report an observed drop of 30 points or more, without assuming a reset, and a reset that moved by an hour or more.")
+                }
+                Toggle(isOn: $alertResetExpiry) {
+                    SettingLabel("Unused reset about to expire",
+                                 detail: "Remind me to activate a banked reset before it expires, with a final reminder in the last hour. Codex uses CLI readings; Claude uses expiry dates entered from Usage. Includes a notification with Open Usage, even with the Voice style.")
+                }
+                if alertResetExpiry {
+                    Picker("Remind before expiry", selection: $resetExpiryLead) {
+                        Text("1 day").tag(24.0)
+                        Text("3 days").tag(72.0)
+                        Text("1 week").tag(168.0)
+                    }
                 }
                 if alertQuota {
                     Picker("Warn when a limit passes", selection: $alertQuotaThreshold) {

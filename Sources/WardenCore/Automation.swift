@@ -4,7 +4,7 @@ import Foundation
 /// about. It carries no prompt, reply, or command; a question alert quotes the question, as its notification does.
 public struct AutomationEvent: Codable, Equatable {
     /// `needs-you`, `finished`, `context`, `cache-expiring`, `limit-warning`, `limit-reached`, `limit-unused`,
-    /// `reset-moved`, `daily-budget`, `quota-available`, `away-summary`, or `test`.
+    /// `reset-moved`, `reset-expiring`, `daily-budget`, `quota-available`, `away-summary`, or `test`.
     public var event: String
     public var at: Date
     /// The notification's title and text.
@@ -38,6 +38,7 @@ public struct AutomationEvent: Codable, Equatable {
             ("approval-", "needs-you"), ("attention-", "needs-you"), ("finish-", "finished"), ("context-", "context"),
             ("cache-", "cache-expiring"), ("resume-", "limit-reached"), ("restored-", "quota-available"),
             ("away-", "away-summary"), ("unused-", "limit-unused"), ("moved-", "reset-moved"), ("budget-", "daily-budget"),
+            ("reset-expiry-", "reset-expiring"),
             ("test-", "test")
         ]
         return prefixes.first { key.hasPrefix($0.0) }?.1 ?? "limit-warning"

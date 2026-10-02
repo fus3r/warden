@@ -6,6 +6,7 @@ struct KeepAwakeSettings: View {
     @AppStorage("keepAwake") private var enabled = false
     @AppStorage("keepAwakeOnBattery") private var onBattery = false
     @AppStorage("keepAwakeClosedLid") private var closedLid = false
+    @AppStorage("sleepWhenAgentsDone") private var sleepWhenDone = false
 
     var body: some View {
         Form {
@@ -41,6 +42,13 @@ struct KeepAwakeSettings: View {
                 }
                 .accessibilityLabel("Keep working with the lid closed")
                 .disabled(!enabled || keepAwake.isRemovingHelper)
+                Toggle(isOn: $sleepWhenDone) {
+                    SettingLabel("Sleep when all prompts are done",
+                                 detail: "With the lid closed, put the Mac to sleep after 30 seconds with no working agents, waiting prompts or unfinished train-guard jobs. New activity cancels the countdown.")
+                }
+                .accessibilityLabel("Sleep when all prompts are done")
+                .disabled(!enabled || !closedLid || keepAwake.isRemovingHelper)
+                .onChange(of: sleepWhenDone) { keepAwake.refresh() }
                 if closedLid || keepAwake.helperStatus == .enabled || keepAwake.helperStatus == .requiresApproval {
                     Text("While active, this also disables Sleep in the Apple menu. Keep the Mac on a ventilated surface; do not put it in a bag while it is working.")
                         .font(.caption).foregroundStyle(.secondary)

@@ -14,9 +14,53 @@ final class TrainGuardTests: XCTestCase {
         try? FileManager.default.removeItem(at: home)
     }
 
+    func testGlobalExceptionsExpireWithoutChangingSessionExceptionsOrPolicy() throws {
+        let guardState = TrainGuard(home: home)
+        try guardState.setIgnored(true, agent: "chosen-session", label: "Codex")
+        let policy = guardState.packageFolder.appendingPathComponent("policy.json")
+        try Data("owner policy".utf8).write(to: policy)
+        let expiry = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded() + 3600)
+        try guardState.setGlobalOverride(true, until: expiry)
+        XCTAssertEqual(guardState.globalOverride()?.expiresAt, expiry)
+        XCTAssertNil(guardState.globalOverride(now: expiry), "Expiry does not depend on an app timer.")
+        XCTAssertEqual(guardState.ignoredAgents(), ["chosen-session"])
+        try guardState.setGlobalOverride(true)
+        XCTAssertNotNil(guardState.globalOverride())
+        XCTAssertNil(guardState.globalOverride()?.expiresAt)
+        try guardState.setGlobalOverride(false)
+        XCTAssertNil(guardState.globalOverride())
+        XCTAssertEqual(guardState.ignoredAgents(), ["chosen-session"])
+        XCTAssertEqual(try Data(contentsOf: policy), Data("owner policy".utf8))
+        XCTAssertThrowsError(try guardState.setGlobalOverride(true, until: Date.distantPast))
+    }
+
+    func testStandaloneCommandCapabilitiesUseTheEnclosingInstallationVersion() throws {
+        let environment = TrainGuardPackage.folder(home: home).appendingPathComponent("env-fixture")
+        let binary = environment.appendingPathComponent("TrainGuard.app/Contents/MacOS/train-guard")
+        let command = environment.appendingPathComponent("bin/train-guard")
+        let manager = FileManager.default
+        for folder in [binary.deletingLastPathComponent(), command.deletingLastPathComponent(), TrainGuardPackage.link(home: home).deletingLastPathComponent()] {
+            try manager.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: binary)
+        try manager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binary.path)
+        try manager.createSymbolicLink(atPath: command.path, withDestinationPath: "../TrainGuard.app/Contents/MacOS/train-guard")
+        try manager.createSymbolicLink(at: TrainGuardPackage.link(home: home), withDestinationURL: command)
+        try Data("Warden".utf8).write(to: TrainGuardPackage.marker(home: home))
+        let version = environment.appendingPathComponent("version")
+        try "0.5.0.dev0\n".write(to: version, atomically: true, encoding: .utf8)
+        XCTAssertTrue(TrainGuard(home: home).supportsSessionControl)
+        XCTAssertFalse(TrainGuard(home: home).supportsGlobalControl)
+        try "0.5.0\n".write(to: version, atomically: true, encoding: .utf8)
+        XCTAssertFalse(TrainGuard(home: home).supportsGlobalControl, "The published 0.5.0 package only supports session exceptions.")
+        try "0.5.1.dev0\n".write(to: version, atomically: true, encoding: .utf8)
+        XCTAssertTrue(TrainGuard(home: home).supportsGlobalControl, "Following both links must not lose the managed version file.")
+    }
+
     func testBundledWheelMustMatchItsDigestBeforeInstallation() throws {
         XCTAssertTrue(TrainGuardPackage.isOlder("0.4.0"))
-        XCTAssertFalse(TrainGuardPackage.isOlder("0.5.0"), "A final release must not be downgraded to a development wheel")
+        XCTAssertTrue(TrainGuardPackage.isOlder("0.5.0"))
+        XCTAssertFalse(TrainGuardPackage.isOlder("0.5.1"), "A final release must not be downgraded to its development wheel")
         let folder = home.appendingPathComponent("TrainGuard")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let wheel = folder.appendingPathComponent(TrainGuardPackage.wheelName)

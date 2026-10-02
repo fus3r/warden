@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build the runtime on the developer's Mac, never on an end user's machine."""
 import argparse
+import email
 import hashlib
 import json
 import os
@@ -10,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument('wheel', type=Path)
@@ -51,6 +53,11 @@ with tempfile.TemporaryDirectory(prefix='warden-freeze-') as temporary:
     value = plistlib.loads(info.read_bytes()); value['LSUIElement'] = True
     info.write_bytes(plistlib.dumps(value))
     version = subprocess.check_output([str(staged / 'TrainGuard.app/Contents/MacOS/train-guard'), '--version'], text=True).strip().removeprefix('train-guard ')
+    with zipfile.ZipFile(wheel) as package:
+        metadata_path = next(name for name in package.namelist() if name.endswith('.dist-info/METADATA'))
+        expected_version = email.message_from_bytes(package.read(metadata_path))['Version']
+    if version != expected_version:
+        raise SystemExit(f'Runtime reports {version}, but the wheel declares {expected_version}.')
     (staged / 'TrainGuard.app/Contents/Resources/version').write_text(version + '\n')
     (staged / 'source.json').write_text(json.dumps(metadata, indent=2) + '\n')
     # CPython's installed license, including licenses for its bundled components.

@@ -3,6 +3,68 @@ import XCTest
 import WardenCore
 
 final class AlertEngineTests: XCTestCase {
+    func testResetRemindersAreIndependentOfQuotaAlertsAndDoNotRepeat() async throws {
+        try await MainActor.run {
+            let defaults = UserDefaults.standard
+            let keys = ["alertResetExpiry", "alertResetExpiryLeadHours", "alertQuota", "soundCodex", "soundClaude", "alertedOnce"]
+            let saved = keys.map { defaults.object(forKey: $0) }
+            defer {
+                for (key, prior) in zip(keys, saved) {
+                    if let prior { defaults.set(prior, forKey: key) } else { defaults.removeObject(forKey: key) }
+                }
+            }
+            defaults.set(true, forKey: "alertResetExpiry")
+            defaults.set(24.0, forKey: "alertResetExpiryLeadHours")
+            defaults.set(false, forKey: "alertQuota")
+            defaults.set("both", forKey: "soundCodex")
+            defaults.set("voice", forKey: "soundClaude")
+            defaults.removeObject(forKey: "alertedOnce")
+            let now = Date()
+            let codex = ResetReminder(provider: .codex, account: "work", expiresAt: now.addingTimeInterval(7200), source: .provider, observedAt: now)
+            let claude = ResetReminder(provider: .claude, expiresAt: now.addingTimeInterval(7200), source: .manual)
+            let engine = AlertEngine(sounds: SoundLibrary())
+            var events: [AutomationEvent] = []
+            engine.onEvent = { events.append($0) }
+            engine.resetExpiry([codex, claude], mode: .all, snoozed: true, now: now)
+            engine.resetExpiry([codex, claude], mode: .all, snoozed: true, now: now)
+            XCTAssertEqual(events.count, 2)
+            XCTAssertTrue(events.allSatisfy { $0.event == "reset-expiring" && !$0.alerted })
+            XCTAssertEqual(events.first?.account, "work")
+            XCTAssertTrue(events[1].message.contains("Check that the reset is still available"))
+            var refreshed = codex
+            refreshed.observedAt = now.addingTimeInterval(3600)
+            engine.resetExpiry([refreshed, claude], mode: .all, snoozed: true, now: refreshed.observedAt)
+            XCTAssertEqual(events.count, 4, "The last hour has its own reminder.")
+            defaults.set([try XCTUnwrap(codex.alertKey(now: now, leadHours: 24))], forKey: "alertedOnce")
+            let relaunched = AlertEngine(sounds: SoundLibrary())
+            relaunched.onEvent = { events.append($0) }
+            relaunched.resetExpiry([codex], mode: .all, snoozed: true, now: now)
+            XCTAssertEqual(events.count, 4, "A reminder delivered before a relaunch stays dismissed.")
+            defaults.set(false, forKey: "alertResetExpiry")
+            relaunched.resetExpiry([claude], mode: .all, snoozed: true, now: now)
+            XCTAssertEqual(events.count, 4)
+        }
+    }
+
+    func testManualResetReminderPersistsAndStopsAfterRemoval() async throws {
+        try await MainActor.run {
+            let suite = "WardenResetTests-" + UUID().uuidString
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let account = AgentAccount(provider: .claude, folder: URL(fileURLWithPath: "/tmp/reset-claude"), name: nil)
+            let expiry = Date().addingTimeInterval(2 * 86_400)
+            let reminders = ResetReminders(defaults: defaults)
+            reminders.add(account: account, expiryDate: expiry)
+            let reopened = ResetReminders(defaults: defaults)
+            let item = try XCTUnwrap(reopened.available(plans: [], accounts: [account]).first)
+            XCTAssertEqual(item.expiresAt, Calendar.current.startOfDay(for: expiry))
+            XCTAssertEqual(item.source, .manual)
+            XCTAssertTrue(reopened.available(plans: [], accounts: []).isEmpty)
+            reopened.remove(item.id)
+            XCTAssertTrue(ResetReminders(defaults: defaults).items.isEmpty)
+        }
+    }
+
     func testAsyncQuestionAlertsWhileWorkingWithoutRepeatingAtTurnEnd() async throws {
         try await MainActor.run {
             let defaults = UserDefaults.standard

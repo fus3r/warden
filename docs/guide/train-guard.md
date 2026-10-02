@@ -9,7 +9,7 @@
 
 ## Install from Warden
 
-Choose **Settings → General → Long Jobs** and install the bundled runtime. This beta includes train-guard **0.5.0.dev0**; no Python installation or dependency download is needed.
+Choose **Settings → General → Long Jobs** and install the bundled runtime. The current source version bundles train-guard **0.5.1.dev0**; no Python installation or dependency download is needed.
 
 Warden verifies payload files against a SHA-256 manifest. Installation uses a separate folder under `~/.local/share/train-guard` and a command link in `~/.local/bin`. Open a new terminal after installing. Existing policy is preserved, and active guards block updates or removal.
 
@@ -36,7 +36,11 @@ Long Jobs can add instructions to each account's `CLAUDE.md` or Codex `AGENTS.md
 
 A file that already mentions train-guard stays as written. Unreadable text is left alone. Symbolic links stay links, with the section added to the target.
 
-## Allow one session to run at full speed
+## Allow jobs to run at full speed
+
+**Ignore train-guard → All Supervised Jobs** offers 30 minutes, 1 hour, 4 hours, a chosen date and time, or until you turn protection back on. This covers current and future package jobs, including jobs with no chat owner, and allows full speed on battery. **End All-Jobs Exception** restores the usual policy while preserving per-session exceptions.
+
+Timed exceptions expire within train-guard itself, even when Warden is closed. These controls require the bundled version; update or migrate an older installation in **Settings → General → Long Jobs**. Legacy shell jobs keep their own policy.
 
 **Ignore train-guard** in the menu lets you exempt a session's guarded jobs, including on battery. Uncheck it to restore the policy; train-guard applies the change at its next check.
 

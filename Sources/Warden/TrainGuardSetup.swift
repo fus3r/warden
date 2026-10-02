@@ -31,10 +31,32 @@ final class TrainGuardSetup: ObservableObject {
     @Published private(set) var files: [InstructionFile] = []
     @Published private(set) var isBusy = false
     @Published var message: String?
+    @Published var choosingOverrideEnd = false
     let home: URL
 
     init(home: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.home = home
+    }
+
+    func ignoreAll(until: Date? = nil) {
+        guard TrainGuard(home: home).supportsGlobalControl else {
+            message = "Update train-guard to the bundled version to use exceptions for all jobs."
+            return
+        }
+        do {
+            try TrainGuard(home: home).setGlobalOverride(true, until: until)
+            message = nil
+            choosingOverrideEnd = false
+            objectWillChange.send()
+        } catch { message = error.localizedDescription }
+    }
+
+    func resumeGuarding() {
+        do {
+            try TrainGuard(home: home).setGlobalOverride(false)
+            message = nil
+            objectWillChange.send()
+        } catch { message = error.localizedDescription }
     }
 
     func refresh(accounts: [AgentAccount]) {

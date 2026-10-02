@@ -3,7 +3,7 @@ import Foundation
 
 /// A self-contained train-guard runtime, signed with Warden and verified before offline installation.
 public enum TrainGuardPackage {
-    public static let version = "0.5.0.dev0"
+    public static let version = "0.5.1.dev0"
     public static let wheelName = "train_guard-\(version)-py3-none-any.whl"
 
     public static var installationIssue: String? {
@@ -172,7 +172,7 @@ public enum TrainGuardInstructions {
 
     `run` records the invoking Claude Code or Codex session when its session ID is available. With `attach`, pass `--agent <original-session-id>` only when the job's original owner is known; attaching from a session does not establish ownership.
 
-    If `train-guard` is not on the PATH, look in `~/.local/bin`. `train-guard run` prints where the job's output goes. The owner can let one agent session skip these rules from Warden's menu (Ignore train-guard), and its jobs then run at full speed. Keep using train-guard all the same, and never add a session to train-guard's ignored-agents list yourself.
+    If `train-guard` is not on the PATH, look in `~/.local/bin`. `train-guard run` prints where the job's output goes. The owner can exempt a session or all jobs from Warden's menu (Ignore train-guard), including until a chosen time. Keep using train-guard all the same, and never change its ignored-agents list or global override yourself.
     \(end)
     """
 

@@ -44,6 +44,8 @@ Plan prices stay in Warden's preferences. The start of an absence and a provider
 
 train-guard stores its managed runtime under `~/.local/share/train-guard`, its command link under `~/.local/bin`, and state/logs under `~/.train-guard`. Warden reads active guard records and ignored-agent lists; a session exception writes its ID, agent, and folder name to that list. Earlier shell installations use `~/.claude/tools/train-guard`.
 
+All-jobs exceptions write only an enabled flag and an optional expiry time to `~/.train-guard/global-override.json`; the usual policy and per-session exceptions remain intact. Reset reminders entered from Usage keep the provider, account label, and expiry date in Warden's local preferences. Provider reset availability comes from Codex's CLI; Warden does not read browser cookies or credentials.
+
 ## Optional network access
 
 | Feature | What leaves the Mac |

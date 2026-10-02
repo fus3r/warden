@@ -23,6 +23,9 @@ final class KeepAwake: ObservableObject {
     private var working = false
     private var guardedJobs = false
     private var phoneAwaitingReply = false
+    private var unfinishedWork = false
+    private var sleepAfterWork = SleepAfterWork()
+    private var sleepReady = false
     private var observedAt = Date.distantPast
     private var requestNumber = 0
     private var removalID: UUID?
@@ -54,10 +57,12 @@ final class KeepAwake: ObservableObject {
         self.timer = timer
     }
 
-    func update(working: Bool, guardedJobs: Bool = false, phoneAwaitingReply: Bool = false, observedAt: Date = Date()) {
+    func update(working: Bool, guardedJobs: Bool = false, phoneAwaitingReply: Bool = false,
+                unfinishedWork: Bool = false, observedAt: Date = Date()) {
         self.working = working
         self.guardedJobs = guardedJobs
         self.phoneAwaitingReply = phoneAwaitingReply
+        self.unfinishedWork = unfinishedWork
         self.observedAt = observedAt
         refresh()
     }
@@ -70,9 +75,16 @@ final class KeepAwake: ObservableObject {
             helperNote = "The power service has not confirmed protection recently. Keep the lid open and check the service."
         }
         let allowBattery = defaults.bool(forKey: "keepAwakeOnBattery")
+        let fresh = Date().timeIntervalSince(observedAt) < 60
+        let uptime = ProcessInfo.processInfo.systemUptime
+        sleepReady = sleepAfterWork.update(enabled: sleepWhenDone && !isFixture && !isRemovingHelper,
+            lidClosed: MacLid.isClosed(), busy: working || guardedJobs || phoneAwaitingReply || unfinishedWork,
+            fresh: fresh, protected: closedLidActive, now: uptime,
+            observedAt: uptime - max(0, Date().timeIntervalSince(observedAt)))
+        let finishing = sleepAfterWork.quietSince != nil && !sleepReady
         policy = KeepAwakePolicy.evaluate(enabled: defaults.bool(forKey: "keepAwake"), working: working,
-            fresh: Date().timeIntervalSince(observedAt) < 60, allowBattery: allowBattery, power: MacPowerState.read(),
-            guardedJobs: guardedJobs, phoneAwaitingReply: phoneAwaitingReply)
+            fresh: fresh, allowBattery: allowBattery, power: MacPowerState.read(),
+            guardedJobs: guardedJobs || finishing, phoneAwaitingReply: phoneAwaitingReply || (sleepWhenDone && unfinishedWork))
         do {
             try assertion.setHeld(policy == .awake && !isFixture)
             isAwake = assertion.isHeld
@@ -80,7 +92,7 @@ final class KeepAwake: ObservableObject {
         } catch { assertionError = error.localizedDescription }
         let wantsLid = policy == .awake && defaults.bool(forKey: "keepAwakeClosedLid") && !isRemovingHelper
         if !isFixture, canAuthorizeHelper, helperStatus == .enabled,
-           wantsLid || connection != nil {
+           wantsLid || sleepReady || connection != nil {
             renewHelper(awake: wantsLid, allowBattery: allowBattery)
         } else if connection != nil {
             disconnect()
@@ -153,6 +165,7 @@ final class KeepAwake: ObservableObject {
     func shutdown() {
         timer?.invalidate()
         timer = nil
+        sleepAfterWork.reset()
         try? assertion.setHeld(false)
         disconnect() // The service restores on XPC disconnect, with lease expiry as a fallback.
     }
@@ -199,6 +212,19 @@ final class KeepAwake: ObservableObject {
                 self.closedLidActive = held
                 self.helperRepliedAt = ProcessInfo.processInfo.systemUptime
                 self.helperNote = message
+                if held, self.policy == .awake {
+                    _ = self.sleepAfterWork.update(enabled: self.sleepWhenDone && !self.isFixture,
+                        lidClosed: MacLid.isClosed(), busy: self.working || self.guardedJobs || self.phoneAwaitingReply || self.unfinishedWork,
+                        fresh: Date().timeIntervalSince(self.observedAt) < 60, protected: true,
+                        now: ProcessInfo.processInfo.systemUptime)
+                }
+                if self.sleepReady, !held, !self.isAwake, message.isEmpty, self.policy == .noWork,
+                   self.sleepWhenDone, MacLid.isClosed(), Date().timeIntervalSince(self.observedAt) < 60 {
+                    self.sleepAfterWork.reset()
+                    self.sleepReady = false
+                    do { try PMSet.sleepNow() }
+                    catch { self.error = "Could not put the Mac to sleep: \(error.localizedDescription)" }
+                }
                 self.describeStatus()
             }
         }
@@ -223,7 +249,8 @@ final class KeepAwake: ObservableObject {
         case .tooHot:
             status = "Paused to let the Mac cool"; detail = "macOS reports critical thermal pressure. Sleep protection is released."
         case .awake:
-            let reason = working ? "agents work" : guardedJobs ? "supervised jobs run" : "a phone reply is pending"
+            let reason = working ? "agents work" : guardedJobs ? "supervised jobs run"
+                : phoneAwaitingReply ? "a phone reply is pending" : "unfinished work is pending"
             status = isAwake ? (closedLidActive ? "Keeping awake, including with lid closed" : "Keeping awake while " + reason) : "Sleep protection unavailable"
             detail = "The display can turn off and the screen can lock. Protection follows running agents, active train-guard jobs and answerable prompts for a paired phone."
         }
@@ -238,9 +265,19 @@ final class KeepAwake: ObservableObject {
         }
         if closedLidActive, !helperNote.isEmpty { status = "Sleep setting needs attention" }
         if let error = error ?? assertionError { detail = error }
+        if policy == .awake, let since = sleepAfterWork.quietSince, error == nil {
+            let remaining = max(0, Int(ceil(SleepAfterWork.quietSeconds - (ProcessInfo.processInfo.systemUptime - since))))
+            status = remaining == 0 ? "Checking activity before sleep" : "Work finished, sleeping in \(remaining)s"
+            detail = "New activity cancels the countdown. Warden restores the sleep setting before putting the Mac to sleep."
+        }
         if isFixture {
             status = "Preview"
             detail = "This window does not change macOS sleep settings."
         }
+    }
+
+    private var sleepWhenDone: Bool {
+        defaults.bool(forKey: "keepAwake") && defaults.bool(forKey: "keepAwakeClosedLid")
+            && defaults.bool(forKey: "sleepWhenAgentsDone")
     }
 }

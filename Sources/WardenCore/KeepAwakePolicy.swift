@@ -50,6 +50,43 @@ public enum KeepAwakePolicy: Equatable {
     }
 }
 
+/// A closed-lid work period must be observed before an idle scan can request sleep.
+/// A short quiet period accommodates the gap between consecutive agent turns.
+public struct SleepAfterWork {
+    public private(set) var armed = false
+    public private(set) var quietSince: TimeInterval?
+    public static let quietSeconds: TimeInterval = 30
+
+    public init() {}
+
+    public mutating func update(enabled: Bool, lidClosed: Bool, busy: Bool, fresh: Bool,
+                                protected: Bool, now: TimeInterval, observedAt: TimeInterval? = nil) -> Bool {
+        guard enabled, lidClosed else { reset(); return false }
+        guard fresh else { quietSince = nil; return false }
+        if busy {
+            quietSince = nil
+            if protected { armed = true }
+            return false
+        }
+        guard armed else { return false }
+        if quietSince == nil { quietSince = now }
+        return (observedAt ?? now) - (quietSince ?? now) >= Self.quietSeconds
+    }
+
+    public mutating func reset() { armed = false; quietSince = nil }
+}
+
+public enum MacLid {
+    /// Unavailable readings never authorize automatic sleep.
+    public static func isClosed() -> Bool {
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
+        guard service != 0 else { return false }
+        defer { IOObjectRelease(service) }
+        return IORegistryEntryCreateCFProperty(service, "AppleClamshellState" as CFString,
+                                               kCFAllocatorDefault, 0)?.takeRetainedValue() as? Bool == true
+    }
+}
+
 /// macOS releases this assertion if the owning process exits. It does not hold the display on.
 public final class IdleSleepAssertion {
     private var assertion: IOPMAssertionID = 0

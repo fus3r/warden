@@ -7,7 +7,7 @@ Build from a clean, committed checkout. Keep signing keys, user settings and tes
 Set the tested wheel and, optionally, a matching frozen runtime:
 
 ```sh
-export WARDEN_TRAIN_GUARD_WHEEL='/path/to/train_guard-0.5.0.dev0-py3-none-any.whl'
+export WARDEN_TRAIN_GUARD_WHEEL='/path/to/train_guard-0.5.1.dev0-py3-none-any.whl'
 export WARDEN_TRAIN_GUARD_RUNTIME='/path/to/runtime'
 train-guard run --name warden-beta -- ./Scripts/package-beta.sh
 ```
@@ -25,7 +25,7 @@ Requires an Apple Developer Program membership, a Developer ID Application ident
 ```sh
 export WARDEN_SIGN_IDENTITY='Developer ID Application: Your Name (TEAMID)'
 export WARDEN_NOTARY_PROFILE='warden-notary'
-export WARDEN_TRAIN_GUARD_WHEEL='/path/to/train_guard-0.5.0.dev0-py3-none-any.whl'
+export WARDEN_TRAIN_GUARD_WHEEL='/path/to/train_guard-0.5.1.dev0-py3-none-any.whl'
 ./Scripts/release.sh --check
 train-guard run --name warden-release -- ./Scripts/release.sh
 ```

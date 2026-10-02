@@ -36,11 +36,15 @@ else
     python3 Scripts/freeze-train-guard.py "$wheel" "$runtime" --architecture universal2
 fi
 python3 - "$runtime" "$wheel" <<'PY_RUNTIME'
-import hashlib, json, pathlib, sys
+import email, hashlib, json, pathlib, sys, zipfile
 runtime, wheel = map(pathlib.Path, sys.argv[1:])
 source = json.loads((runtime / "source.json").read_text())
 assert source["wheel_sha256"] == hashlib.sha256(wheel.read_bytes()).hexdigest(), "Runtime and wheel do not match"
 assert source["architecture"] == "universal2", "The bundled runtime must support Apple silicon and Intel"
+with zipfile.ZipFile(wheel) as package:
+    metadata_path = next(name for name in package.namelist() if name.endswith('.dist-info/METADATA'))
+    expected_version = email.message_from_bytes(package.read(metadata_path))["Version"]
+assert (runtime / "TrainGuard.app/Contents/Resources/version").read_text().strip() == expected_version, "Runtime and wheel versions do not match"
 for notice in ("PYTHON-LICENSE.txt", "PYINSTALLER-LICENSE.txt"):
     assert (runtime / "TrainGuard.app/Contents/Resources" / notice).is_file(), f"Runtime is missing {notice}"
 PY_RUNTIME
