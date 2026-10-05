@@ -18,12 +18,13 @@
 
 - **Know when you're needed.** Get alerts for approvals, questions, failures and completed turns. Answer supported prompts from the menu.
 - **Return to your session.** Open the right terminal or resume where you left off.
+- **Follow remote agents.** Monitor Linux sessions over SSH from your Mac, and return to their existing tmux panes. [SSH setup](docs/guide/remote-ssh.md).
 - **Follow context and usage.** Check quotas, reset readings, local history and work planning. Sources and estimates are clearly labeled.
 - **Supervise long jobs.** Built-in [train-guard](https://github.com/fus3r/train-guard) pauses supervised jobs on battery and lowers their priority when the battery is warm.
 
 Optional extras: [Keep Awake](https://warden.readthedocs.io/en/latest/guide/power/), [local phone access](https://warden.readthedocs.io/en/latest/guide/phone/) and [widgets](https://warden.readthedocs.io/en/latest/guide/sessions/#widgets).
 
-Monitoring and history stay on your Mac. Warden does not read provider credentials. [Sources and privacy →](https://warden.readthedocs.io/en/latest/reference/privacy/)
+History stays on your Mac. Optional SSH monitoring brings filtered remote states and counters to the same menu. Warden does not read provider credentials. [Sources and privacy →](https://warden.readthedocs.io/en/latest/reference/privacy/)
 
 ## Install
 

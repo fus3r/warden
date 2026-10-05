@@ -194,6 +194,12 @@ public struct AgentSession: Codable, Equatable, Identifiable {
     /// Claude Code calls the session busy although its log shows the turn ended, as it does while a command the
     /// session started in the background still runs. Claude goes on when that command ends.
     public var busyInBackground = false
+    /// SSH observations belong to another machine. Its PIDs must never be treated as local processes.
+    public var remote: RemoteSessionOrigin?
+
+    public var activityProject: String {
+        remote.map { ($0.destination.hasPrefix("ssh://") ? $0.destination : "ssh://" + $0.destination) + cwd } ?? cwd
+    }
 
     public var project: String {
         if cwd.isEmpty { return provider.rawValue }

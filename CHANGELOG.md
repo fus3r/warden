@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 beta (build 9)
+
+- Follow Claude Code and Codex on Linux hosts through independent SSH connections, with filtered remote states, counters and provider quota readings in the Mac menu.
+- Add SSH host settings, automatic reconnection, explicit disconnected states and navigation to identified existing tmux panes or a unique Terminal/iTerm SSH tab.
+- Keep remote process IDs separate from Mac navigation and train-guard controls, and remote quota readings separate from local token history.
+
 ## 0.4.0 beta (build 8)
 
 - Return Codex questions to the correct VS Code terminal by excluding tool app servers from terminal matching. Report a missing editor terminal instead of activating an unrelated window.

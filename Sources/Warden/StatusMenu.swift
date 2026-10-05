@@ -162,7 +162,20 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             menu.addItem(item)
         }
 
-        let listed = attention + working + recent
+        if !store.remotes.hosts.isEmpty {
+            menu.addItem(.separator())
+            let remote = NSMenuItem(title: "Remote SSH…", action: #selector(runViewAction(_:)), keyEquivalent: "")
+            remote.target = self
+            let summary = store.remotes.hosts.map { "\($0.name): \(store.remotes.states[$0.id]?.phase.rawValue ?? "Paused")" }.joined(separator: ", ")
+            setSubtitle(remote, MenuFormat.fit(summary, width: 222, font: subtitleFont))
+            remote.toolTip = summary
+            remote.representedObject = ViewAction { [weak self] in
+                UserDefaults.standard.set("ssh", forKey: "settingsTab")
+                self?.openSettings()
+            }
+            menu.addItem(remote)
+        }
+        let listed = (attention + working + recent).filter { $0.remote == nil }
         if let item = trainGuardItem(for: listed) {
             if !showsRecent { menu.addItem(.separator()) }
             menu.addItem(item)
@@ -556,6 +569,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     private func subtitle(for session: AgentSession) -> String {
         var parts = [session.provider.rawValue + (session.account.map { " (\($0))" } ?? "")]
+        if session.remote?.connected == false { parts.append("SSH disconnected") }
         // A titled session names its task above, so the folder moves here.
         if session.title != nil { parts.append(session.project) }
         if store.isMuted(session) { parts.append("Muted") }
@@ -656,11 +670,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         var lines: [String] = []
         let agent = session.provider == .claude ? "Claude Code" : "Codex"
         if let title = session.title { lines.append(title) }
-        let host = SessionNavigator.hostName(SessionNavigator.hostBundleID(for: session, processes: store.processes))
+        let host = session.remote.map { "SSH on \($0.label)" } ?? SessionNavigator.hostName(SessionNavigator.hostBundleID(for: session, processes: store.processes))
         lines.append(["\(session.provider.rawValue)\(host.map { " in \($0)" } ?? "")", session.model]
             .compactMap { $0 }.joined(separator: " · "))
         if let value = session.contextPercent {
-            let source = session.contextEvidence == .provider ? "reported by Claude Code" : "estimated from the local log"
+            let source = session.contextEvidence == .provider ? "reported by Claude Code" : "estimated from the \(session.remote == nil ? "local" : "remote") log"
             lines.append("Context \(Int(value.rounded()))%, \(source)")
         } else {
             lines.append("Context unavailable")
@@ -677,8 +691,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
         switch session.phaseEvidence {
         case .provider: lines.append("State reported by \(agent)")
-        case .localLog: lines.append("State from the local session log")
+        case .localLog: lines.append("State from the \(session.remote == nil ? "local" : "remote") session log")
         case .inferred: lines.append("State inferred from process activity")
+        }
+        if let remote = session.remote {
+            lines.append(remote.connected ? "Filtered telemetry over SSH from \(remote.destination). Answer questions in the remote terminal." : "SSH disconnected. This session's current state is unavailable.")
         }
         if session.attention == .question || session.attention == .choice {
             // The subtitle often cuts the question short.

@@ -19,6 +19,7 @@ output="$project_dir/build/downloads/$version-$build"
 [[ ! -e "$output" ]] || fail "Already packaged: $output. Increment CFBundleVersion for another candidate."
 
 swift test
+python3 -m unittest discover -s Tests/RemoteCollectorTests -v
 node --test Extensions/warden-terminal/extension.test.js
 ./Scripts/build-app.sh universal
 app="$project_dir/build/Warden.app"

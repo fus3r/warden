@@ -132,6 +132,15 @@ final class WardenStore: ObservableObject {
     private static let statusSession = URLSession(configuration: .ephemeral)
     let keepAwake = KeepAwake()
     let resetReminders = ResetReminders()
+    #if DEBUG
+    // Isolated native SSH QA uses its own disposable identity and known-hosts file.
+    let remotes = RemoteConnections(configuration: ProcessInfo.processInfo.environment["WARDEN_SUPPORT_DIR"] == nil ? nil
+        : ProcessInfo.processInfo.environment["WARDEN_SSH_CONFIG_FILE"].map { URL(fileURLWithPath: $0) })
+    #else
+    let remotes = RemoteConnections()
+    #endif
+    private var localScan: ScanResult?
+    private var localConnections: [String: ClaudeConnection] = [:]
     private var timer: Timer?
     private var isScanning = false
     private var usageRequested = false
@@ -232,6 +241,8 @@ final class WardenStore: ObservableObject {
         let log = activityLog
         activitySpans = historyQueue.sync { log.all }
         activity = ActivityRecorder(saved: activitySpans.filter { $0.end > Date().addingTimeInterval(-86_400) })
+        remotes.onChange = { [weak self] in self?.presentScan() }
+        remotes.start()
         refresh()
         refreshHistory()
         let timer = Timer(timeInterval: 8, repeats: true) { [weak self] _ in
@@ -298,6 +309,7 @@ final class WardenStore: ObservableObject {
         #if DEBUG
         if DebugSupport.usesFixture { return }
         #endif
+        remotes.refreshUsagePreferences()
         guard !isScanning else {
             usageRequested = usageRequested || usage
             return
@@ -576,6 +588,7 @@ final class WardenStore: ObservableObject {
                          guardedJobs: !guardState.workingJobs().isEmpty,
                          phoneAwaitingReply: waiting,
                          unfinishedWork: attentionCount > 0 || !approvals.isEmpty
+                            || remotes.hasUncertainWork
                             || !guardState.runningPackageGuards().isEmpty || !guardState.runningScriptGuards().isEmpty,
                          observedAt: scannedAt ?? .distantPast)
         if phone.isServing, let state { phone.publish(state) }
@@ -611,6 +624,7 @@ final class WardenStore: ObservableObject {
 
     /// Saves the history's read positions and closes the prompt socket before Warden quits.
     func shutdown() {
+        remotes.shutdown()
         keepAwake.shutdown()
         #if DEBUG
         if DebugSupport.usesFixture { return }
@@ -816,24 +830,38 @@ final class WardenStore: ObservableObject {
         let result = DebugSupport.fixture(result)
         #endif
         isScanning = false
+        localScan = result
+        localConnections = connections
+        presentScan()
+        if usageRequested {
+            usageRequested = false
+            refresh(usage: true)
+        }
+    }
+
+    private func presentScan() {
+        guard let result = localScan else { return }
+        let now = Date()
+        let connections = localConnections
         let waits = codexWaits.values.reduce(into: [String: CodexApprovals.Wait]()) { $0.merge($1) { first, _ in first } }
         let followed = result.sessions.filter { Accounts.follows($0.provider, account: $0.account, in: accounts) }
-        sessions = CodexApprovals.applying(waits, to: followed)
-        windows = result.windows.filter { Accounts.follows($0.provider, account: $0.account, in: accounts) }
+        sessions = CodexApprovals.applying(waits, to: followed) + remotes.sessions
+        let localWindows = result.windows.filter { Accounts.follows($0.provider, account: $0.account, in: accounts) }
+        windows = localWindows + remotes.windows
         releaseUnfollowedApprovals()
-        paceTracker.record(windows, now: result.scannedAt)
+        paceTracker.record(windows, now: now)
         if defaults.bool(forKey: "historyEnabled") {
-            quotaReadings += windows.filter { previousWindows[$0.id]?.observedAt != $0.observedAt }
+            quotaReadings += localWindows.filter { previousWindows[$0.id]?.observedAt != $0.observedAt }
             // The first readings reach the quota ledger without waiting for the minute's history read.
             if !quotaReadings.isEmpty, quota?.windows.isEmpty ?? true { refreshHistory(soon: true) }
         }
-        recordActivity(now: result.scannedAt)
-        checkPresence(now: result.scannedAt)
-        checkProviderStatus(now: result.scannedAt)
+        recordActivity(now: now)
+        checkPresence(now: now)
+        checkProviderStatus(now: now)
         plans = result.plans.filter { Accounts.follows($0.provider, account: $0.account, in: accounts) }
         processes = result.processes
         nativeApps = result.nativeApps
-        scannedAt = result.scannedAt
+        scannedAt = now
         let primary = accounts.first { $0.provider == .claude && $0.name == nil }
         let connection = primary.flatMap { connections[$0.id] } ?? .notConnected
         if claudeConnection != connection { claudeConnection = connection }
@@ -853,10 +881,6 @@ final class WardenStore: ObservableObject {
         previousSessions = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { _, newest in newest })
         previousWindows = Dictionary(uniqueKeysWithValues: windows.map { ($0.id, $0) })
         hasBaseline = true
-        if usageRequested {
-            usageRequested = false
-            refresh(usage: true)
-        }
     }
 }
 

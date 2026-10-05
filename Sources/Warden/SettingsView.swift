@@ -54,6 +54,9 @@ struct WardenSettings: View {
             general
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag("general")
+            RemoteSettings(connections: store.remotes)
+                .tabItem { Label("SSH", systemImage: "network") }
+                .tag("ssh")
             SoundSettings(sounds: store.sounds)
                 .tabItem { Label("Sounds", systemImage: "speaker.wave.2") }
                 .tag("sounds")

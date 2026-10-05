@@ -68,6 +68,7 @@ nav:
       - History and reports: guide/history.md
       - Work Planner: guide/planner.md
   - Long jobs and devices:
+      - Remote agents over SSH: guide/remote-ssh.md
       - train-guard: guide/train-guard.md
       - Keep Awake: guide/power.md
       - Phone access: guide/phone.md

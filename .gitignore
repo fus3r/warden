@@ -6,6 +6,7 @@ build/
 node_modules/
 *.vsix
 *.whl
+__pycache__/
 Relay/data/
 .env
 .env.*

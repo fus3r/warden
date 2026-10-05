@@ -82,7 +82,7 @@ public struct ActivityRecorder {
             }
             guard let state else { continue }
             open[session.id] = ActivitySpan(session: session.id, provider: session.provider, account: session.account,
-                                            project: session.cwd, kind: state.kind, attention: state.attention, tool: state.tool,
+                                            project: session.activityProject, kind: state.kind, attention: state.attention, tool: state.tool,
                                             start: max(after, Self.start(of: session, state: state, now: now)), end: now)
         }
         for (id, span) in open where !seen.contains(id) && now.timeIntervalSince(span.end) > Self.gone {

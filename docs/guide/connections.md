@@ -2,6 +2,8 @@
 
 Warden discovers local Claude Code and Codex sessions. Connect Claude Code for exact context readings and approval buttons; add the VS Code companion for precise terminal selection.
 
+For agents running on a Linux server, use **Settings → SSH**. See [Remote agents over SSH](remote-ssh.md) for key authentication, tmux navigation and clusters.
+
 <figure class="warden-settings-shot" markdown="span">
 [![Warden's General settings with Claude Code connection, prompt answering, account usage reads, and Long Jobs.](../assets/screenshots/settings-general.png)](../assets/screenshots/settings-general.png)
 <figcaption>General contains connections, prompt answering, and account usage reads. The preview has not connected Claude Code.</figcaption>

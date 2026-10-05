@@ -17,6 +17,7 @@ enum SessionNavigator {
 
     /// Host app of the session: recorded by the bridge, found through its process, or implied by the surface.
     static func hostBundleID(for session: AgentSession, processes: [AgentProcess]) -> String? {
+        guard session.remote == nil else { return nil }
         if let bundleID = session.host?.bundleID { return bundleID }
         if let pid = session.host?.pid, let process = processes.first(where: { $0.id == Int(pid) }) {
             return process.hostBundleID
@@ -42,6 +43,7 @@ enum SessionNavigator {
     }
 
     static func open(_ session: AgentSession, processes: [AgentProcess], accounts: [AgentAccount]) {
+        if session.remote != nil { RemoteSessionNavigator.open(session); return }
         Task {
             // Check the live owner at click time; a folder can outlive several unrelated conversations.
             let files = session.host?.pid == nil ? await Task.detached {
@@ -112,7 +114,7 @@ enum SessionNavigator {
         return String(data: data, encoding: .utf8) ?? ""
     }
 
-    private static func liveHost(of pid: Int32) -> String? {
+    static func liveHost(of pid: Int32) -> String? {
         var current = pid
         for _ in 0..<16 where current > 1 {
             if let app = NSRunningApplication(processIdentifier: current), app.activationPolicy == .regular {
@@ -133,6 +135,10 @@ enum SessionNavigator {
             showError("The \(session.provider.rawValue) command or this session's account could not be found.")
             return
         }
+        runInTerminal(command)
+    }
+
+    static func runInTerminal(_ command: String) {
         let source = """
         tell application "Terminal"
             do script \(SessionNavigation.appleScriptLiteral(command))
@@ -144,8 +150,8 @@ enum SessionNavigator {
         if result == nil || error != nil {
             // An explicit failure keeps the user in the session workflow and makes permission denial recoverable.
             let alert = NSAlert()
-            alert.messageText = "Open this conversation in Terminal"
-            alert.informativeText = "Warden could not open Terminal. You can paste the resume command into a terminal yourself."
+            alert.messageText = "Open in Terminal"
+            alert.informativeText = "Warden could not open Terminal. You can paste this command into a terminal yourself."
             alert.addButton(withTitle: "Copy Command")
             alert.addButton(withTitle: "Cancel")
             NSApp.activate(ignoringOtherApps: true)
@@ -171,6 +177,7 @@ enum SessionNavigator {
     /// True when the session's own Terminal or iTerm tab is the one in front, so you already see what it does.
     /// Warden asks only a terminal it may already script, and never raises the Automation prompt for this.
     static func isInFront(_ session: AgentSession, processes: [AgentProcess]) -> Bool {
+        guard session.remote == nil else { return false }
         // A locked screen shows nothing, whatever app was in front.
         let locked = (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool ?? false
         guard !locked, let bundleID = hostBundleID(for: session, processes: processes),
@@ -208,7 +215,7 @@ enum SessionNavigator {
     }
 
     /// Selects the Terminal or iTerm tab attached to the session's terminal device. macOS asks once for permission.
-    private static func selectTab(tty: String, bundleID: String) -> Bool {
+    static func selectTab(tty: String, bundleID: String) -> Bool {
         let device = "/dev/" + tty.replacingOccurrences(of: "/dev/", with: "")
         guard device.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "/" }) else { return false }
         let source: String
