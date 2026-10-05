@@ -18,7 +18,7 @@
 
 - **Know when you're needed.** Get alerts for approvals, questions, failures and completed turns. Answer supported prompts from the menu.
 - **Return to your session.** Open the right terminal or resume where you left off.
-- **Follow remote agents.** Monitor Linux sessions from your Mac, including after SSH expires through an optional encrypted HTTPS feed. Start a temporary collector during one login, without installing Warden on the server. [Remote setup](docs/guide/remote-ssh.md).
+- **Follow remote agents.** Monitor Linux sessions from your Mac, including after SSH expires through an optional encrypted HTTPS feed. Start a temporary collector during one login, without installing Warden on the server. [Remote setup](https://warden.readthedocs.io/en/latest/guide/remote-ssh/).
 - **Follow context and usage.** Check quotas, reset readings, local history and work planning. Sources and estimates are clearly labeled.
 - **Supervise long jobs.** Built-in [train-guard](https://github.com/fus3r/train-guard) pauses supervised jobs on battery and lowers their priority when the battery is warm.
 

@@ -52,7 +52,7 @@ HTTPS and permission for detached processes. Keep Warden open and the Mac
 awake for alerts. Returning to a terminal still uses normal SSH authentication.
 The relay receives encrypted metadata only, without the decryption key or
 conversation content. Shared free-plan limits apply.
-Guide: https://github.com/fus3r/warden/blob/main/docs/guide/remote-ssh.md
+Guide: https://warden.readthedocs.io/en/latest/guide/remote-ssh/
 
 TRAIN-GUARD (OPTIONAL)
 

@@ -2,6 +2,8 @@
 
 This service carries encrypted observations from a temporary Linux collector to Warden on the Mac, independently of SSH. Nothing is installed on the monitored host. The original Node relay in `Relay/` supports the same API for self-hosting.
 
+For setup, use the official [relay hosting guide](https://warden.readthedocs.io/en/latest/guide/relays/#cloudflare-agent-relay).
+
 Warden beta 11 includes `https://warden-agent-relay.darwishriad0.workers.dev` as its default agent relay. This deployment uses the Workers Free plan and shared account quotas. A custom relay origin can be selected per host.
 
 The SQLite-backed Durable Object stores routing-token hashes, a Mac connection challenge, provider-read preferences and liveness times. It never receives the encryption key. It also replaces one opaque encrypted packet per host so Cloudflare hibernation cannot lose a publication between Mac polls. Packets older than ninety seconds are deleted on the next feed read; a fresh Mac connection challenge, pause or removal deletes that host's packet immediately. There is no packet history. Mac interpretation and alerts stay local. Access logs and application observability are disabled in the supplied configuration. Cloudflare still handles network routing and can observe traffic timing and packet sizes.

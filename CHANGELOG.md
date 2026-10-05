@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0 beta (build 12)
+
+- Open setup guides on the official documentation site from the README, downloads and release notes.
+- Add relay hosting instructions to the documentation, including Cloudflare and phone deployment.
+
 ## 0.4.0 beta (build 11)
 
 - Follow Linux agents after SSH authentication expires with a temporary collector in memory, without installing remote files, packages or services.

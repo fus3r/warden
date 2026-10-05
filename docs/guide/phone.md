@@ -44,6 +44,6 @@ Builds configured with a relay offer **Settings → Phone → Anywhere**. They p
 
 The Mac and phone encrypt session state and replies using per-device keys. The relay forwards opaque packets and keeps routing and push metadata, with no session history. Generic Web Push notices contain no command or question. On iPhone, add the page to the Home Screen and grant notifications there.
 
-See [Relay deployment and privacy boundaries](https://github.com/fus3r/warden/tree/main/Relay) for setup and physical-device checks. Local pairing does not verify mobile-data or locked-screen notification delivery.
+See [Relay hosting](relays.md#self-hosted-node-relay) for setup and physical-device checks. Local pairing does not verify mobile-data or locked-screen notification delivery.
 
 **Related:** [Phone troubleshooting](../reference/troubleshooting.md#the-phone-cannot-connect) · [Sources and privacy](../reference/privacy.md#optional-network-access)

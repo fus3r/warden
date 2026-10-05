@@ -1,6 +1,8 @@
 # Warden phone service
 
-The Node service also supports encrypted agent feeds at `/v1/feeds/` for monitoring after SSH expires. The agent-only [Cloudflare Worker](Worker/README.md) is the simpler free-plan hosting option for that feature. The phone service below is separate.
+The Node service also supports encrypted agent feeds at `/v1/feeds/` for monitoring after SSH expires. The agent-only [Cloudflare Worker](https://warden.readthedocs.io/en/latest/guide/relays/#cloudflare-agent-relay) is the simpler free-plan hosting option for that feature. The phone service below is separate.
+
+For setup, use the official [relay hosting guide](https://warden.readthedocs.io/en/latest/guide/relays/#self-hosted-node-relay).
 
 The publisher hosts this service once. Users scan a QR code in Warden and can then use the phone page over Wi-Fi or mobile data. They do not install a VPN, configure a server, or trust a local certificate. The existing local-network mode remains available.
 
