@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 beta (build 8)
+
+- Return Codex questions to the correct VS Code terminal by excluding tool app servers from terminal matching. Report a missing editor terminal instead of activating an unrelated window.
+- Add an option to sleep after all agent work, unanswered prompts and supervised jobs finish when using closed-lid mode.
+- Add timed, custom-date and indefinite train-guard exceptions for all jobs, while preserving per-session controls.
+- Remind users before Codex reset credits expire, with provider-backed expiry dates and manually entered Claude reset reminders.
+- Bundle train-guard 0.5.1.dev0 with standalone enforcement of all-jobs exception expiry, including when Warden is closed.
+
 ## 0.4.0 beta (build 7)
 
 - Alert for Codex questions while the agent keeps working, without repeating the alert when the turn ends with the same question open.

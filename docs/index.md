@@ -30,7 +30,7 @@ See which sessions are working or waiting for you, return to their terminals, an
 </div>
 
 !!! info "About this beta"
-    **0.4.0 beta, build 7** includes the train-guard runtime and local-network phone access. It is not yet notarized by Apple; the [installation guide](getting-started.md#first-launch-of-this-beta) explains first launch. A hosted phone relay is available for self-hosting, and is not included in this beta.
+    **0.4.0 beta, build 8** includes the train-guard runtime and local-network phone access. It is not yet notarized by Apple; the [installation guide](getting-started.md#first-launch-of-this-beta) explains first launch. A hosted phone relay is available for self-hosting, and is not included in this beta.
 
 ## Local monitoring, visible sources
 
