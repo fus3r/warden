@@ -63,6 +63,7 @@ manifest = {
     "source_repository": "https://github.com/fus3r/warden", "source_revision": sys.argv[3],
     "license": "MIT", "architectures": ["arm64", "x86_64"],
     "notarized": False, "phone": "local network",
+    "agent_relay": info.get("WardenAgentRelayURL"),
     "signature": "ad-hoc" if "Signature=adhoc" in signature else "certificate; not notarized",
     "train_guard": {"wheel": wheel.name, "sha256": digest(wheel)},
     "executables_sha256": {name: digest(app / name) for name in (

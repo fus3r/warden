@@ -26,16 +26,13 @@ With SSH monitoring, a cluster that forcibly closes all approved connections aft
 
 ## Follow after SSH expires
 
-!!! note "Available in the next build"
-    The downloadable build 10 uses SSH monitoring. The memory-only HTTPS collector described here is being prepared for the next release.
-
 For long runs on a cluster with expiring SSH access, Warden can start a **temporary collector in memory** during one authorized login. After that, the collector sends end-to-end encrypted states to a HTTPS relay independently of SSH. Closing a terminal or refusing a new SSH login does not stop this route.
 
-No Warden code, package, provider hook, SSH key or service is installed on the remote host. The collector runs under your own Linux account, using Python 3.8+ and its existing system OpenSSL library. Its source and Warden pairing material arrive over SSH stdin and stay in the process's memory. Existing provider CLIs continue to manage their own usage-read runtime files. A server reboot or a cluster policy that terminates detached processes ends the collector; this mode does not override either policy.
+No Warden code, package, provider hook, SSH key or service is installed on the remote host. The collector runs under your own Linux account, using Python 3.8+, its existing system OpenSSL library and HTTPS certificate trust store. Its source and Warden pairing material arrive over SSH stdin and stay in the process's memory. Existing provider CLIs continue to manage their own usage-read runtime files. A server reboot or a cluster policy that terminates detached processes ends the collector; this mode does not override either policy.
 
-1. Configure a Warden HTTPS relay. The publisher can provide one, or deploy [the free-plan Cloudflare Worker](https://github.com/fus3r/warden/tree/main/Relay/Worker) or the self-hosted Node relay described in the repository. No extra server or software is needed on the cluster.
+1. Build 11 includes the relay at `https://warden-agent-relay.darwishriad0.workers.dev`. You can also deploy [the free-plan Cloudflare Worker](https://github.com/fus3r/warden/tree/main/Relay/Worker) or the self-hosted Node relay described in the repository. No extra server or software is needed on the cluster. The included relay uses shared free-plan quotas; if they are exhausted, monitoring is unavailable until service returns.
 2. Add the host in **Settings → SSH**, then choose **Follow after SSH expires…**.
-3. Enter the verified relay origin and choose **Start in Terminal**. Complete the ordinary SSH and phone approval once. The command sends the private bootstrap file from this Mac over stdin; it never copies a script to Linux.
+3. Keep the included relay origin, or enter your own, and choose **Start in Terminal**. Complete the ordinary SSH and phone approval once. The command sends the private bootstrap file from this Mac over stdin; it never copies a script to Linux.
 4. When the feed connects, the host shows **HTTPS feed · SSH can be disconnected**. Start your agents in tmux or screen so they survive logout too.
 
 The relay receives only opaque AES-256-GCM packets. The Mac holds the decryption key, interprets the same redacted metadata as SSH mode, and generates its usual alerts. The relay stores routing-token hashes and liveness configuration, without the key or conversation history. Cloudflare also replaces one stored encrypted packet per host to survive runtime hibernation; packets older than ninety seconds are deleted on the next feed read. The self-hosted Node relay keeps its packet in memory. A fresh Mac connection challenge, pause or removal clears the packet. The challenge and increasing packet counter prevent retained ciphertext from presenting an old state as a new heartbeat.

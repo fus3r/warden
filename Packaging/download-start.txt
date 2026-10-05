@@ -39,6 +39,21 @@ If you use VS Code's integrated terminals, install warden-terminal.vsix via
 Extensions → … → Install from VSIX… . The companion selects the right terminal.
 If VS Code asks to reload the window, wait until your sessions can be interrupted.
 
+REMOTE AGENTS (OPTIONAL)
+
+In Settings → SSH, add the SSH destination where your Linux agents run.
+Use Authenticate in Terminal for your normal password, key or phone approval.
+For long runs whose SSH access expires, choose Follow after SSH expires… and
+keep the included relay address. Start in Terminal performs one authorized
+login and launches a temporary collector in memory, without installing Warden
+files, packages or services on the server. Run agents in tmux or screen so
+they survive logout. The server needs Python 3.8+, system OpenSSL, outbound
+HTTPS and permission for detached processes. Keep Warden open and the Mac
+awake for alerts. Returning to a terminal still uses normal SSH authentication.
+The relay receives encrypted metadata only, without the decryption key or
+conversation content. Shared free-plan limits apply.
+Guide: https://github.com/fus3r/warden/blob/main/docs/guide/remote-ssh.md
+
 TRAIN-GUARD (OPTIONAL)
 
 Install train-guard in Settings → General. Its runtime is already in the app.

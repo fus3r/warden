@@ -1,10 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 beta (build 11)
 
 - Follow Linux agents after SSH authentication expires with a temporary collector in memory, without installing remote files, packages or services.
 - Send redacted observations over end-to-end encrypted HTTPS, with a fresh connection challenge, bounded packets and explicit unavailable states.
-- Prepare an agent-only Cloudflare Worker compatible with the free plan, alongside the self-hosted Node relay.
+- Include a hosted agent relay on Cloudflare Workers Free, with an optional self-hosted Worker or Node relay.
 
 ## 0.4.0 beta (build 10)
 

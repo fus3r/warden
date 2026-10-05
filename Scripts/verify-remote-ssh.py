@@ -57,7 +57,7 @@ def prepare():
     context.mkdir(exist_ok=True)
     (context / "fake-cli").write_text(FAKE_CLI)
     (context / "Dockerfile").write_text("""FROM ubuntu:24.04
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-server python3 tmux screen && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates openssh-server python3 tmux screen && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /run/sshd /root/.ssh /root/.local/bin /project && chmod 700 /root/.ssh
 COPY fake-cli /root/.local/bin/codex
 RUN chmod +x /root/.local/bin/codex && cp /root/.local/bin/codex /root/.local/bin/claude && ssh-keygen -A

@@ -219,7 +219,7 @@ final class RemoteConnectionTests: XCTestCase {
         let baselineDiagnostic = await MainActor.run {
             "\(connections.states.values.first?.message ?? "No transport error"); sessions: \(connections.sessions.map { "\($0.remote?.sessionID ?? "?")=\($0.phase.rawValue)" }.joined(separator: ", "))"
         }
-        XCTAssertTrue(baselineReady, baselineDiagnostic)
+        guard baselineReady else { XCTFail(baselineDiagnostic); return }
         let before = try await MainActor.run { try XCTUnwrap(connections.sessions.first { $0.remote?.sessionID == identity }) }
         XCTAssertTrue(before.surface.hasPrefix("HTTPS"))
         let previousTimestamp = try await MainActor.run { try XCTUnwrap(connections.states.values.first?.receivedAt) }

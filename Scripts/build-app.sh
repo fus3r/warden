@@ -59,6 +59,7 @@ url = urlsplit(sys.argv[1])
 if url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment or url.path not in ('', '/'):
     raise SystemExit('WARDEN_AGENT_RELAY_URL must be an HTTPS origin without credentials or a path.')
 PY_AGENT_RELAY
+    plutil -remove WardenAgentRelayURL "$app/Contents/Info.plist" 2>/dev/null || true
     plutil -insert WardenAgentRelayURL -string "$WARDEN_AGENT_RELAY_URL" "$app/Contents/Info.plist"
 fi
 if [[ -n "${WARDEN_PHONE_RELAY_URL:-}" ]]; then

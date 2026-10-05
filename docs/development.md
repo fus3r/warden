@@ -13,11 +13,11 @@ train-guard run --name warden-build -- ./Scripts/build-app.sh
 open build/Warden.app
 ```
 
-For the released **v0.4.0-beta.10** source tag, use its published wheel. It contains the Python source and MIT license; its SHA-256 is recorded in `SHA256SUMS.txt` and `manifest.json`.
+For the released **v0.4.0-beta.11** source tag, use its published wheel. It contains the Python source and MIT license; its SHA-256 is recorded in `SHA256SUMS.txt` and `manifest.json`.
 
 ```sh
 mkdir -p build/dependencies
-curl -fL https://github.com/fus3r/warden/releases/download/v0.4.0-beta.10/train_guard-0.5.1.dev0-py3-none-any.whl \
+curl -fL https://github.com/fus3r/warden/releases/download/v0.4.0-beta.11/train_guard-0.5.1.dev0-py3-none-any.whl \
   -o build/dependencies/train_guard-0.5.1.dev0-py3-none-any.whl
 export WARDEN_TRAIN_GUARD_WHEEL="$PWD/build/dependencies/train_guard-0.5.1.dev0-py3-none-any.whl"
 ./Scripts/build-app.sh

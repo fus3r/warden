@@ -72,7 +72,8 @@ class FeedStopped(Exception):
 def feed_request(config, method, value=None):
     body = compact(value).encode() if value is not None else None
     request = urllib.request.Request(config["relay"].rstrip("/") + "/v1/feeds/" + config["room"], data=body,
-        method=method, headers={"Authorization": "Bearer " + config["publisherToken"], "Content-Type": "application/json"})
+        method=method, headers={"Authorization": "Bearer " + config["publisherToken"], "Content-Type": "application/json",
+                               "User-Agent": "Warden/0.4"})
     try:
         # Never follow a redirect with the publisher credential.
         class NoRedirect(urllib.request.HTTPRedirectHandler):

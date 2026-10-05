@@ -2,6 +2,8 @@
 
 This service carries encrypted observations from a temporary Linux collector to Warden on the Mac, independently of SSH. Nothing is installed on the monitored host. The original Node relay in `Relay/` supports the same API for self-hosting.
 
+Warden beta 11 includes `https://warden-agent-relay.darwishriad0.workers.dev` as its default agent relay. This deployment uses the Workers Free plan and shared account quotas. A custom relay origin can be selected per host.
+
 The SQLite-backed Durable Object stores routing-token hashes, a Mac connection challenge, provider-read preferences and liveness times. It never receives the encryption key. It also replaces one opaque encrypted packet per host so Cloudflare hibernation cannot lose a publication between Mac polls. Packets older than ninety seconds are deleted on the next feed read; a fresh Mac connection challenge, pause or removal deletes that host's packet immediately. There is no packet history. Mac interpretation and alerts stay local. Access logs and application observability are disabled in the supplied configuration. Cloudflare still handles network routing and can observe traffic timing and packet sizes.
 
 ## Free-plan fit
@@ -39,7 +41,13 @@ WARDEN_FEED_RELAY_URL=http://127.0.0.1:8788 npm --prefix Relay test
 train-guard run --name warden-feed-qa -- python3 Scripts/verify-remote-ssh.py --feed
 ```
 
-The Linux test uses a disposable Docker SSH server, closes its SSH sessions, revokes its test key, and checks that a completion still reaches the Mac over this Worker. It also checks replayed-packet liveness, unavailable states, reconnection and collector removal. It does not test a particular cluster's logout or network policy, a physical phone approval, or Cloudflare's public production service.
+The Linux test uses a disposable Docker SSH server, closes its SSH sessions, revokes its test key, and checks that a completion still reaches the Mac over this Worker. It also checks replayed-packet liveness, unavailable states, reconnection and collector removal. Release verification also passed these checks through the deployed public Worker, using normal TLS certificate verification. The collector identifies itself with a Warden User-Agent; the default Python identifier was rejected by Cloudflare with HTTP 403/error 1010 during verification. A particular cluster's logout or network policy and a physical phone approval have not been tested.
+
+To exercise the public relay protocol with disposable pairings:
+
+```sh
+WARDEN_FEED_RELAY_URL=https://warden-agent-relay.darwishriad0.workers.dev npm --prefix Relay test
+```
 
 ## Alternatives
 
