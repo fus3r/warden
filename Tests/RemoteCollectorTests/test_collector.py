@@ -89,7 +89,7 @@ class CollectorTests(unittest.TestCase):
                 (folder / (identity + ".jsonl")).write_text(json.dumps(value) + "\n")
             process = {"pid": 123, "provider": "Codex", "cwd": "/project", "argv": ["codex"]}
             pane = {123: {"session": "$0", "window": "@0", "pane": "%1"}}
-            with mock.patch.object(remote.Collector, "refresh_providers"), mock.patch.object(remote, "accounts", return_value=[("Codex", None, home / ".codex")]), mock.patch.object(remote, "linux_processes", return_value=([process], {})), mock.patch.object(remote, "tmux_targets", return_value=pane):
+            with mock.patch.object(remote.Collector, "refresh_providers"), mock.patch.object(remote, "accounts", return_value=[("Codex", None, home / ".codex")]), mock.patch.object(remote, "linux_processes", return_value=([process], {})), mock.patch.object(remote, "tmux_targets", return_value=pane), mock.patch.object(remote, "screen_targets", return_value={}):
                 collector = remote.Collector(home)
                 self.assertTrue(all("tmux" not in file for file in collector.snapshot()["files"]))
                 process["argv"] = ["codex", "resume", "s1"]
@@ -108,10 +108,26 @@ class CollectorTests(unittest.TestCase):
             parent.write_text(value)
             worker.write_text(value)
             os.utime(parent, (0, 0))
-            with mock.patch.object(remote.Collector, "refresh_providers"), mock.patch.object(remote, "accounts", return_value=[("Claude", None, home / ".claude")]), mock.patch.object(remote, "linux_processes", return_value=([], {})), mock.patch.object(remote, "tmux_targets", return_value={}):
+            with mock.patch.object(remote.Collector, "refresh_providers"), mock.patch.object(remote, "accounts", return_value=[("Claude", None, home / ".claude")]), mock.patch.object(remote, "linux_processes", return_value=([], {})), mock.patch.object(remote, "tmux_targets", return_value={}), mock.patch.object(remote, "screen_targets", return_value={}):
                 snapshot = remote.Collector(home).snapshot()
                 self.assertEqual({file["filename"] for file in snapshot["files"]}, {"parent.jsonl", "agent-worker.jsonl"})
                 self.assertNotIn(SECRET, remote.compact(snapshot))
+
+    def test_reconnecting_collector_finds_an_old_run_without_a_resumed_id(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = pathlib.Path(directory)
+            folder = home / ".codex/sessions"
+            folder.mkdir(parents=True)
+            for identity, cwd in (("running", "/long-run"), ("unrelated", "/other")):
+                path = folder / (identity + ".jsonl")
+                path.write_text(json.dumps({"type": "session_meta", "payload": {"id": identity, "cwd": cwd}}) + "\n")
+                os.utime(path, (0, 0))
+            process = {"pid": 123, "provider": "Codex", "cwd": "/long-run", "argv": ["codex"]}
+            screen = {123: {"session": "42.training"}}
+            with mock.patch.object(remote.Collector, "refresh_providers"), mock.patch.object(remote, "accounts", return_value=[("Codex", None, home / ".codex")]), mock.patch.object(remote, "linux_processes", return_value=([process], {})), mock.patch.object(remote, "tmux_targets", return_value={}), mock.patch.object(remote, "screen_targets", return_value=screen):
+                files = remote.Collector(home).snapshot()["files"]
+                self.assertEqual([file["filename"] for file in files], ["running.jsonl"])
+                self.assertEqual(files[0].get("screen"), screen[123])
 
 
 if __name__ == "__main__":

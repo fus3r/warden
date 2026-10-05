@@ -4,7 +4,10 @@ import Foundation
 import WardenCore
 
 struct RemoteHostState {
-    enum Phase: String { case connecting = "Connecting", connected = "Connected", reconnecting = "Reconnecting", paused = "Paused" }
+    enum Phase: String {
+        case connecting = "Connecting", connected = "Connected", reconnecting = "Reconnecting", paused = "Paused"
+        case authenticationRequired = "Authentication required"
+    }
     var phase: Phase = .connecting
     var message: String?
     var receivedAt: Date?
@@ -24,6 +27,7 @@ final class RemoteConnections: ObservableObject {
     private let configuration: URL?
     private var streams: [String: RemoteSSHStream] = [:]
     private var generations: [String: UUID] = [:]
+    private var attemptedSockets: [String: UInt64] = [:]
     private var timer: Timer?
     private var started = false
     private var usageProviders: [String] = []
@@ -94,6 +98,24 @@ final class RemoteConnections: ObservableObject {
         connect(host)
     }
 
+    func authenticationCommand(for host: RemoteSSHHost) -> String? {
+        let path = controlPath(for: host)
+        do {
+            try RemoteSSHAuthentication.prepare(path)
+            return RemoteNavigation.authenticationCommand(host: host, controlPath: path.path, configuration: configuration?.path)
+        } catch {
+            var state = states[host.id] ?? RemoteHostState()
+            state.message = "Could not prepare SSH sign-in: \(error.localizedDescription)"
+            states[host.id] = state
+            onChange?()
+            return nil
+        }
+    }
+
+    func controlPath(for host: RemoteSSHHost) -> URL {
+        RemoteSSHAuthentication.controlPath(hostID: host.id, destination: host.destination, root: storage.deletingLastPathComponent())
+    }
+
     func refreshUsagePreferences() {
         let changed = RemoteSSHStream.usageProviders
         guard started, changed != usageProviders else { return }
@@ -161,7 +183,10 @@ final class RemoteConnections: ObservableObject {
         state.phase = state.snapshot == nil ? .connecting : .reconnecting
         state.retryAt = nil; state.message = nil
         states[host.id] = state
-        let stream = RemoteSSHStream(host: host, collector: collector, configuration: configuration)
+        let path = controlPath(for: host)
+        let socket = RemoteSSHAuthentication.socketIdentity(path)
+        attemptedSockets[host.id] = socket
+        let stream = RemoteSSHStream(host: host, collector: collector, configuration: configuration, controlPath: socket == nil ? nil : path)
         streams[host.id] = stream
         stream.start { [weak self] snapshot in
             Task { @MainActor in
@@ -174,7 +199,10 @@ final class RemoteConnections: ObservableObject {
                 guard let self, self.generations[host.id] == generation else { return }
                 self.streams.removeValue(forKey: host.id)
                 var state = self.states[host.id] ?? RemoteHostState()
-                state.phase = .reconnecting; state.message = message; state.retryAt = Date().addingTimeInterval(30)
+                let authentication = RemoteSSHAuthentication.required(message)
+                state.phase = authentication ? .authenticationRequired : .reconnecting
+                state.message = authentication ? "Sign in with Authenticate in Terminal, including your phone approval. Warden resumes when the shared connection is ready.\n\(message)" : message
+                state.retryAt = authentication ? nil : Date().addingTimeInterval(30)
                 self.states[host.id] = state
                 self.onChange?()
             }
@@ -186,6 +214,10 @@ final class RemoteConnections: ObservableObject {
         refreshUsagePreferences()
         let now = Date()
         for host in hosts where host.enabled {
+            if states[host.id]?.phase == .authenticationRequired,
+               let socket = RemoteSSHAuthentication.socketIdentity(controlPath(for: host)), socket != attemptedSockets[host.id] {
+                connect(host)
+            }
             if let state = states[host.id], state.phase == .connected, let received = state.receivedAt,
                now.timeIntervalSince(received) > 45 {
                 stop(host.id)
@@ -204,6 +236,7 @@ final class RemoteSSHStream: @unchecked Sendable {
     private let host: RemoteSSHHost
     private let collector: URL?
     private let configuration: URL?
+    private let controlPath: URL?
     private let task = Process()
     private let lock = NSLock()
     private var stopped = false
@@ -217,8 +250,8 @@ final class RemoteSSHStream: @unchecked Sendable {
         }
     }
 
-    init(host: RemoteSSHHost, collector: URL?, configuration: URL? = nil) {
-        self.host = host; self.collector = collector; self.configuration = configuration
+    init(host: RemoteSSHHost, collector: URL?, configuration: URL? = nil, controlPath: URL? = nil) {
+        self.host = host; self.collector = collector; self.configuration = configuration; self.controlPath = controlPath
     }
 
     func start(snapshot: @escaping @Sendable (RemoteSnapshot) -> Void, closed: @escaping @Sendable (String) -> Void) {
@@ -232,7 +265,7 @@ final class RemoteSSHStream: @unchecked Sendable {
                 code.append(providers); code.append(Data("\n".utf8)); code.append(try Data(contentsOf: collector))
                 let input = Pipe(), output = Pipe(), error = Pipe()
                 task.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-                task.arguments = (configuration.map { ["-F", $0.path] } ?? []) + host.monitoringArguments
+                task.arguments = (configuration.map { ["-F", $0.path] } ?? []) + (controlPath.map { ["-S", $0.path] } ?? []) + host.monitoringArguments
                 task.standardInput = input; task.standardOutput = output; task.standardError = error
                 lock.lock()
                 if stopped { lock.unlock(); return }

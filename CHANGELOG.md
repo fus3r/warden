@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 beta (build 10)
+
+- Sign in interactively in Terminal for passwords, security keys and phone approval, then reuse the approved SSH connection without changing SSH configuration.
+- Show authentication-required states after access expires, stop automatic authentication attempts, and resume monitoring after manual sign-in.
+- Return to identified existing GNU screen sessions and retain older logs belonging to still-running remote agents after reconnecting.
+
 ## 0.4.0 beta (build 9)
 
 - Follow Claude Code and Codex on Linux hosts through independent SSH connections, with filtered remote states, counters and provider quota readings in the Mac menu.

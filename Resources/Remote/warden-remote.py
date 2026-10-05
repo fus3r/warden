@@ -8,6 +8,7 @@ No packages, hooks, or configuration changes are needed on the remote host.
 import json
 import os
 import pathlib
+import re
 import selectors
 import shutil
 import signal
@@ -317,6 +318,31 @@ def tmux_targets(processes, parents):
     return targets
 
 
+def screen_targets(processes, parents):
+    targets = {}
+    if not shutil.which("screen"):
+        return targets
+    try:
+        output = subprocess.run(["screen", "-ls"], capture_output=True, timeout=2).stdout[:16384].decode()
+        sessions = {}
+        for line in output.splitlines():
+            match = re.match(r"\s*(\d+\.[A-Za-z0-9_.-]+)\s+\(", line)
+            if match:
+                sessions[int(match[1].split(".")[0])] = {"session": match[1]}
+        for process in processes:
+            pid = process["pid"]
+            for _ in range(32):
+                if pid in sessions:
+                    targets[process["pid"]] = sessions[pid]
+                    break
+                pid = parents.get(pid, 0)
+                if pid <= 1:
+                    break
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+    return targets
+
+
 def executable(name):
     for candidate in (pathlib.Path.home() / ".local/bin" / name, pathlib.Path.home() / ".npm-global/bin" / name,
                       pathlib.Path.home() / ".bun/bin" / name):
@@ -450,12 +476,14 @@ class Collector:
         self.refresh_providers(discovered, now)
         processes, parents = linux_processes()
         targets = tmux_targets(processes, parents)
+        screens = screen_targets(processes, parents)
         with self.lock:
             active_ids = {entry.get("sessionId") for view in self.views.values() if now - view["observedAt"] < 45
                           for entry in json.loads(view["entries"]) if entry.get("status") in ("busy", "waiting") or entry.get("state") in ("working", "blocked")}
         active_ids.update(arg for process in processes for arg in process["argv"] if len(arg) == 36 and arg.count("-") == 4)
         files, paths = [], set()
         for provider, account, folder in discovered:
+            live_folders = {p["cwd"] for p in processes if p["provider"] == provider}
             titles = codex_titles(folder) if provider == "Codex" else {}
             root = folder / ("sessions" if provider == "Codex" else "projects")
             candidates = []
@@ -473,11 +501,7 @@ class Collector:
                         stat = path.stat()
                     except OSError:
                         continue
-                    cached = self.cache.get(str(path))
-                    metadata = json.loads(cached[2]["head"]) if cached and cached[2] and cached[2]["head"].strip() else {}
-                    payload = metadata.get("payload", {}) if provider == "Codex" else metadata
-                    still_running = any(p["provider"] == provider and p["cwd"] == payload.get("cwd") for p in processes)
-                    if stat.st_mtime >= now - 6 * 3600 or still_running or any(identity and identity in path.stem for identity in active_ids):
+                    if stat.st_mtime >= now - 6 * 3600 or live_folders or any(identity and identity in path.stem for identity in active_ids):
                         candidates.append((stat.st_mtime, path, stat.st_size))
                         if provider == "Claude" and path.parent.name == "subagents" and stat.st_mtime >= now - 1800:
                             parent = path.parent.parent.parent / (path.parent.parent.name + ".jsonl")
@@ -499,8 +523,14 @@ class Collector:
                     self.cache[key] = (modified, size, read_file(path, provider, account, folder))
                 if self.cache[key][2]:
                     file = dict(self.cache[key][2])
+                    metadata = json.loads(file["head"]) if file["head"].strip() else {}
+                    payload = metadata.get("payload", {}) if provider == "Codex" else metadata
+                    identity = payload.get("id") or payload.get("session_id") or payload.get("sessionId") or path.stem
+                    if modified < now - 6 * 3600 and payload.get("cwd") not in live_folders and identity not in active_ids:
+                        # Keep an older parent when a fresh Claude worker still references it.
+                        if not any(item[1].parent.name == "subagents" and item[1].parent.parent.name == path.stem for item in workers):
+                            continue
                     if provider == "Codex":
-                        metadata = json.loads(file["head"]) if file["head"].strip() else {}
                         identity = metadata.get("payload", {}).get("id")
                         if identity in titles:
                             file["title"] = titles[identity]
@@ -539,6 +569,8 @@ class Collector:
                 # A cwd fallback helps liveness but cannot pick a pane among several recent conversations.
                 if match["pid"] in targets and (len(exact) == 1 or folder_counts.get((file["provider"], cwd)) == 1):
                     file["tmux"] = targets[match["pid"]]
+                if match["pid"] in screens and (len(exact) == 1 or folder_counts.get((file["provider"], cwd)) == 1):
+                    file["screen"] = screens[match["pid"]]
         with self.lock:
             usage, views = list(self.usage.values()), list(self.views.values())
         result = {"version": 1, "observedAt": now, "files": sorted(files, key=lambda f: (not bool(f.get("parentID")), f["modifiedAt"]), reverse=True)[:84],

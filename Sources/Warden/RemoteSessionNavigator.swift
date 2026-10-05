@@ -9,7 +9,10 @@ enum RemoteSessionNavigator {
             show("SSH monitoring is disconnected from \(remote.label). Reconnect in Warden Settings, or return to your existing remote terminal.")
             return
         }
-        if let command = RemoteNavigation.tmuxCommand(for: session) {
+        let path = RemoteSSHAuthentication.controlPath(hostID: remote.hostID, destination: remote.destination)
+        let controlPath = RemoteSSHAuthentication.socketIdentity(path) == nil ? nil : path.path
+        if let command = RemoteNavigation.tmuxCommand(for: session, controlPath: controlPath)
+            ?? RemoteNavigation.screenCommand(for: session, controlPath: controlPath) {
             SessionNavigator.runInTerminal(command)
             return
         }
@@ -17,7 +20,7 @@ enum RemoteSessionNavigator {
             let matches = await Task.detached { interactiveProcesses(destination: remote.destination) }.value
             if matches.count == 1, let pid = matches.first, let tty = ProcessDetails.tty(of: pid),
                let bundle = SessionNavigator.liveHost(of: pid), SessionNavigator.selectTab(tty: tty, bundleID: bundle) { return }
-            show("Warden could not identify a single Terminal or iTerm SSH tab for \(remote.destination). Return to the agent's existing terminal. Run agents inside tmux to reopen their exact pane after disconnecting.")
+            show("Warden could not identify a single Terminal or iTerm SSH tab for \(remote.destination). Return to the agent's existing terminal. Use tmux or screen to return to a persistent session after disconnecting.")
         }
     }
 

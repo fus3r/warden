@@ -71,6 +71,25 @@ final class RemoteSSHTests: XCTestCase {
         XCTAssertNil(RemoteNavigation.interactiveDestination(arguments: ["ssh", "-T", "compute", "python3 -u -"]))
     }
 
+    func testInteractiveAuthenticationAndScreenReattachUseTheSameSharedConnection() throws {
+        let host = RemoteSSHHost(destination: "cluster")
+        let path = "/private/warden ssh/approved.sock"
+        let authenticate = try XCTUnwrap(RemoteNavigation.authenticationCommand(host: host, controlPath: path))
+        XCTAssertTrue(authenticate.contains("ControlMaster=auto"))
+        XCTAssertTrue(authenticate.contains("BatchMode=no"))
+        XCTAssertFalse(host.monitoringArguments.contains("ControlPath=none"), "Monitoring must honor an existing configured SSH master.")
+        XCTAssertTrue(host.monitoringArguments.contains("BatchMode=yes"), "Only the interactive terminal can request MFA.")
+        var session = try XCTUnwrap(snapshot().sessions(host: host).first)
+        session.remote?.screen = RemoteScreenTarget(session: "123.training")
+        let command = try XCTUnwrap(RemoteNavigation.screenCommand(for: session, controlPath: path))
+        XCTAssertTrue(command.contains(SessionNavigation.shellQuote(path)))
+        XCTAssertTrue(command.contains("screen -x -p"))
+        XCTAssertFalse(command.contains("-R"), "Screen navigation must never create another session.")
+        XCTAssertFalse(RemoteScreenTarget(session: "123.training; touch /tmp/marker").valid)
+        session.remote?.connected = false
+        XCTAssertNil(RemoteNavigation.screenCommand(for: session, controlPath: path))
+    }
+
     func testClaudeWorkerLogWithParentSessionIDDoesNotReplaceTheParentRow() throws {
         let user = #"{"type":"user","sessionId":"parent","cwd":"/project","message":{"content":""}}"#
         let done = #"{"type":"assistant","sessionId":"parent","cwd":"/project","message":{"model":"claude-sonnet-4-5","stop_reason":"end_turn","content":[]}}"#

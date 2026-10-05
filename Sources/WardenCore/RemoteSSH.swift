@@ -24,7 +24,7 @@ public struct RemoteSSHHost: Codable, Equatable, Identifiable {
         ["-T", "-x", "-o", "ClearAllForwardings=yes", "-o", "RemoteCommand=none",
          "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=8",
          "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2", "-o", "ControlMaster=no",
-         "-o", "ControlPath=none", "-o", "ForwardAgent=no", destination, "python3 -u -"]
+         "-o", "ForwardAgent=no", destination, "python3 -u -"]
     }
 }
 
@@ -44,6 +44,18 @@ public struct RemoteTmuxTarget: Codable, Equatable {
     }
 }
 
+public struct RemoteScreenTarget: Codable, Equatable {
+    public var session: String
+
+    public init(session: String) { self.session = session }
+
+    public var valid: Bool {
+        let parts = session.split(separator: ".", maxSplits: 1)
+        return session.utf8.count <= 200 && parts.count == 2 && parts[0].allSatisfy { "0123456789".contains($0) }
+            && parts[1].allSatisfy { "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-".contains($0) }
+    }
+}
+
 public struct RemoteSessionOrigin: Codable, Equatable {
     public var hostID: String
     public var destination: String
@@ -51,11 +63,12 @@ public struct RemoteSessionOrigin: Codable, Equatable {
     public var sessionID: String
     public var accountFolder: String
     public var tmux: RemoteTmuxTarget?
+    public var screen: RemoteScreenTarget?
     public var connected: Bool = true
 
-    public init(host: RemoteSSHHost, sessionID: String, accountFolder: String, tmux: RemoteTmuxTarget? = nil) {
+    public init(host: RemoteSSHHost, sessionID: String, accountFolder: String, tmux: RemoteTmuxTarget? = nil, screen: RemoteScreenTarget? = nil) {
         hostID = host.id; destination = host.destination; label = host.name
-        self.sessionID = sessionID; self.accountFolder = accountFolder; self.tmux = tmux
+        self.sessionID = sessionID; self.accountFolder = accountFolder; self.tmux = tmux; self.screen = screen
     }
 }
 
@@ -72,6 +85,7 @@ public struct RemoteSnapshot: Decodable {
         public var title: String?
         public var pid: Int32?
         public var tmux: RemoteTmuxTarget?
+        public var screen: RemoteScreenTarget?
         public var inputPending: Bool?
         public var parentID: String?
     }
@@ -155,7 +169,7 @@ public struct RemoteSnapshot: Decodable {
             if session.isHeadless, session.phase == .needsAttention, !isRunning {
                 session.phase = .idle; session.attention = nil
             }
-            session.remote = RemoteSessionOrigin(host: host, sessionID: session.id, accountFolder: file.accountFolder, tmux: file.tmux)
+            session.remote = RemoteSessionOrigin(host: host, sessionID: session.id, accountFolder: file.accountFolder, tmux: file.tmux, screen: file.screen)
             session.id = "ssh:\(host.id):\(session.provider.rawValue):\(session.id)"
             session.host = nil
             session.surface = "SSH · \(host.name)"
@@ -213,12 +227,33 @@ public enum RemoteNavigation {
         return nil
     }
 
-    public static func tmuxCommand(for session: AgentSession) -> String? {
+    public static func tmuxCommand(for session: AgentSession, controlPath: String? = nil) -> String? {
         guard let remote = session.remote, remote.connected, RemoteSSHHost.validDestination(remote.destination),
               let target = remote.tmux, target.valid else { return nil }
         let quote = SessionNavigation.shellQuote
         let command = "tmux select-window -t \(quote(target.session + ":" + target.window)) && tmux select-pane -t \(quote(target.pane)) && tmux attach-session -t \(quote(target.session))"
-        return ["/usr/bin/ssh", "-t", "-o", "RemoteCommand=none", "-o", "ClearAllForwardings=yes", remote.destination, command].map(quote).joined(separator: " ")
+        return attachCommand(destination: remote.destination, command: command, controlPath: controlPath)
+    }
+
+    public static func screenCommand(for session: AgentSession, controlPath: String? = nil) -> String? {
+        guard let remote = session.remote, remote.connected, RemoteSSHHost.validDestination(remote.destination),
+              let target = remote.screen, target.valid else { return nil }
+        // Reattach only this existing session. A window list avoids guessing which screen window hosts the agent.
+        return attachCommand(destination: remote.destination,
+                             command: "screen -x -p '=' " + SessionNavigation.shellQuote(target.session), controlPath: controlPath)
+    }
+
+    private static func attachCommand(destination: String, command: String, controlPath: String?) -> String {
+        (["/usr/bin/ssh", "-t", "-o", "RemoteCommand=none", "-o", "ClearAllForwardings=yes"]
+            + (controlPath.map { ["-S", $0] } ?? []) + [destination, command]).map(SessionNavigation.shellQuote).joined(separator: " ")
+    }
+
+    public static func authenticationCommand(host: RemoteSSHHost, controlPath: String, configuration: String? = nil) -> String? {
+        guard RemoteSSHHost.validDestination(host.destination) else { return nil }
+        return (["/usr/bin/ssh"] + (configuration.map { ["-F", $0] } ?? [])
+            + ["-t", "-S", controlPath, "-o", "ControlMaster=auto", "-o", "ControlPersist=5m",
+                "-o", "BatchMode=no", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "-o", "RemoteCommand=none",
+                host.destination]).map(SessionNavigation.shellQuote).joined(separator: " ")
     }
 
     public static func loginCommand(host: RemoteSSHHost) -> String? {

@@ -57,7 +57,7 @@ def prepare():
     context.mkdir(exist_ok=True)
     (context / "fake-cli").write_text(FAKE_CLI)
     (context / "Dockerfile").write_text("""FROM ubuntu:24.04
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-server python3 tmux && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-server python3 tmux screen && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /run/sshd /root/.ssh /root/.local/bin /project && chmod 700 /root/.ssh
 COPY fake-cli /root/.local/bin/codex
 RUN chmod +x /root/.local/bin/codex && cp /root/.local/bin/codex /root/.local/bin/claude && ssh-keygen -A
@@ -153,6 +153,21 @@ def verify_navigation(env):
         pane = run([DOCKER, "exec", env["WARDEN_SSH_TEST_CONTAINER"], "tmux", "display-message", "-p", "-t", "agents", "#{pane_id}"], capture_output=True, text=True).stdout.strip()
         assert pane == target["pane"], "The production navigation command selected the wrong tmux pane"
         print("Production tmux navigation selected the exact pane", flush=True)
+    finally:
+        client.terminate(); client.wait(timeout=5)
+
+    target = json.loads((QA / "screen-command.json").read_text())
+    args = shlex.split(target["command"])
+    args[1:1] = ["-F", env["WARDEN_SSH_TEST_CONFIG"]]
+    args[args.index("-t")] = "-tt"
+    client = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=dict(os.environ, TERM="xterm"))
+    try:
+        time.sleep(1)
+        assert client.poll() is None, "The production screen navigation command failed to attach"
+        sessions = run([DOCKER, "exec", env["WARDEN_SSH_TEST_CONTAINER"], "screen", "-ls"], capture_output=True, text=True).stdout
+        line = next(line for line in sessions.splitlines() if target["session"] in line)
+        assert "Attached" in line
+        print("Production screen navigation attached to the identified existing session", flush=True)
     finally:
         client.terminate(); client.wait(timeout=5)
 

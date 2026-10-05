@@ -31,7 +31,7 @@ struct RemoteSettings: View {
                     }
                     .disabled(!RemoteSSHHost.validDestination(destination.trimmingCharacters(in: .whitespacesAndNewlines)))
                 }
-                Text("Connect once in Terminal to accept the server's host key. Monitoring requires a key available through your SSH agent or Keychain. For a cluster reached through a login node, use your usual SSH alias with ProxyJump.")
+                Text("Connect once in Terminal to accept the server's host key. For passwords, phone approval or expiring access, add the host then choose Authenticate in Terminal. For a cluster reached through a login node, use your usual SSH alias with ProxyJump.")
                     .font(.caption).foregroundStyle(.secondary)
                 if let message = error ?? connections.storageError { Text(message).foregroundStyle(.red).font(.caption) }
             }
@@ -56,8 +56,8 @@ struct RemoteSettings: View {
                         }
                         HStack {
                             Button("Retry") { connections.retry(host) }.disabled(!host.enabled)
-                            Button("Open SSH") {
-                                if let command = RemoteNavigation.loginCommand(host: host) { SessionNavigator.runInTerminal(command) }
+                            Button("Authenticate in Terminal") {
+                                if let command = connections.authenticationCommand(for: host) { SessionNavigator.runInTerminal(command) }
                             }
                             Spacer()
                             Button("Remove") { connections.remove(host) }
@@ -66,11 +66,13 @@ struct RemoteSettings: View {
                 }
             }
             Section("Returning to an agent") {
-                Text("Run agents inside tmux to reopen their exact pane after disconnecting. Without tmux, Warden can focus a single matching SSH tab in Terminal or iTerm. If several tabs connect to the same host, return to the agent's tab yourself.")
+                Text("Use tmux to reopen the exact pane, or screen to return to its existing session and window list. Without either, Warden can focus a single matching SSH tab in Terminal or iTerm. If several tabs connect to the same host, return to the agent's tab yourself.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Only filtered states, titles, paths and counters cross SSH. Questions show a generic indicator; answer in the remote terminal. Remote quotas are shown separately. Token history and train-guard controls cover this Mac.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Pausing or removing a host closes monitoring only. Remote agents keep running. Monitoring resumes when Warden reconnects; it pauses while this Mac is asleep.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Phone approval stays manual in your usual authentication app. Warden reuses the SSH connection you approved. If the server expires it, sign in again; agents in tmux or screen can keep running while their state is unavailable.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

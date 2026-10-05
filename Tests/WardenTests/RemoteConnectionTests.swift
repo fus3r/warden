@@ -109,6 +109,105 @@ final class RemoteConnectionTests: XCTestCase {
         try docker(["exec", container, "tmux", "has-session", "-t", "agents"])
     }
 
+    /// No live MFA service is contacted. Revoking the disposable key proves monitoring borrows approved transport.
+    func testLinuxSSHWithInteractiveAuthenticationExpiryAndScreen() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let config = env["WARDEN_SSH_TEST_CONFIG"], let container = env["WARDEN_SSH_TEST_CONTAINER"] else {
+            throw XCTSkip("Run Scripts/verify-remote-ssh.py for shared-authentication and screen checks.")
+        }
+        let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let root = URL(fileURLWithPath: "/tmp/warden-auth-" + UUID().uuidString.prefix(8))
+        let connections = await MainActor.run {
+            RemoteConnections(storage: root.appendingPathComponent("hosts.json"), collector: source.appendingPathComponent("Resources/Remote/warden-remote.py"), configuration: URL(fileURLWithPath: config))
+        }
+        await MainActor.run { _ = connections.add(destination: "warden-qa", name: "MFA fixture"); connections.start() }
+        defer { Task { @MainActor in connections.shutdown() } }
+        let host = try await MainActor.run { try XCTUnwrap(connections.hosts.first) }
+        let control = await MainActor.run { connections.controlPath(for: host) }
+        let command = try await MainActor.run { try XCTUnwrap(connections.authenticationCommand(for: host)) }
+        defer {
+            try? ssh(config: config, control: control.path, arguments: ["-O", "exit", "warden-qa"])
+            try? FileManager.default.removeItem(at: root)
+        }
+        let permissions = try FileManager.default.attributesOfItem(atPath: control.deletingLastPathComponent().path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(permissions?.intValue, 0o700)
+        XCTAssertNotEqual(control, RemoteSSHAuthentication.controlPath(hostID: host.id, destination: "different", root: root))
+        let ready = await waitUntil { connections.states[host.id]?.phase == .connected }
+        XCTAssertTrue(ready)
+        try authenticate(command)
+        XCTAssertNotNil(RemoteSSHAuthentication.socketIdentity(control))
+        try docker(["exec", container, "mv", "/root/.ssh/authorized_keys", "/root/.ssh/authorized_keys.qa-backup"])
+        defer {
+            try? docker(["exec", container, "python3", "-c", "from pathlib import Path; p=Path('/root/.ssh/authorized_keys.qa-backup'); p.exists() and p.rename('/root/.ssh/authorized_keys')"])
+        }
+        await MainActor.run { connections.retry(host) }
+        let shared = await waitUntil { connections.states[host.id]?.phase == .connected }
+        XCTAssertTrue(shared, "Monitoring must work over the approved connection with its login key revoked.")
+        try ssh(config: config, control: control.path, arguments: ["-O", "exit", "warden-qa"])
+        let lost = await waitUntil { connections.states[host.id]?.phase == .reconnecting }
+        XCTAssertTrue(lost)
+        await MainActor.run { connections.retry(host) }
+        let expired = await waitUntil { connections.states[host.id]?.phase == .authenticationRequired }
+        XCTAssertTrue(expired)
+        await MainActor.run {
+            XCTAssertNil(connections.states[host.id]?.retryAt, "Do not keep trying authentication while phone approval is needed.")
+            XCTAssertTrue(connections.sessions.allSatisfy { $0.phase == .unknown && $0.remote?.connected == false })
+            XCTAssertTrue(connections.hasUncertainWork)
+        }
+        try docker(["exec", container, "mv", "/root/.ssh/authorized_keys.qa-backup", "/root/.ssh/authorized_keys"])
+        try authenticate(command)
+        let resumed = await waitUntil { connections.states[host.id]?.phase == .connected }
+        XCTAssertTrue(resumed, "Monitoring resumes when manual sign-in creates the approved shared connection.")
+
+        // An old log in a still-running screen job must also survive a fresh collector after reauthentication.
+        let identity = "86d66237-6ead-4aab-8888-097d81e4de33"
+        let fixture = """
+        import json,pathlib,os,time
+        pathlib.Path('/screen-project').mkdir(exist_ok=True)
+        path=pathlib.Path('/root/.codex/sessions/2026/10/05/\(identity).jsonl')
+        old=time.time()-36*3600
+        entries=[{'type':'session_meta','payload':{'id':'\(identity)','cwd':'/screen-project','originator':'codex-tui'}},{'timestamp':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime(old)),'type':'event_msg','payload':{'type':'task_started'}}]
+        path.write_text('\\n'.join(map(json.dumps,entries))+'\\n')
+        os.utime(path,(old,old))
+        """
+        try docker(["exec", container, "python3", "-c", fixture])
+        try docker(["exec", "-w", "/screen-project", container, "screen", "-dmS", "long-run", "-t", "coding", "/root/.local/bin/codex"])
+        await MainActor.run { connections.retry(host) }
+        let screen = await waitUntil { connections.sessions.contains { $0.remote?.sessionID == identity && $0.remote?.screen != nil } }
+        XCTAssertTrue(screen)
+        let target = try await MainActor.run { try XCTUnwrap(connections.sessions.first { $0.remote?.sessionID == identity }) }
+        XCTAssertEqual(target.phase, .working)
+        XCTAssertNil(target.host)
+        if let artifact = env["WARDEN_SSH_TEST_COMMAND"] {
+            let destination = URL(fileURLWithPath: artifact).deletingLastPathComponent().appendingPathComponent("screen-command.json")
+            let command = try XCTUnwrap(RemoteNavigation.screenCommand(for: target))
+            let session = try XCTUnwrap(target.remote?.screen?.session)
+            try JSONSerialization.data(withJSONObject: ["command": command, "session": session]).write(to: destination)
+        }
+        await MainActor.run { connections.remove(host); connections.shutdown() }
+        try ssh(config: config, control: control.path, arguments: ["-O", "check", "warden-qa"])
+        try docker(["exec", container, "screen", "-S", "long-run", "-Q", "windows"])
+    }
+
+    private func authenticate(_ command: String) throws {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = ["-c", "exec " + command + " 'true'"]
+        task.standardInput = FileHandle.nullDevice
+        task.standardOutput = FileHandle.nullDevice
+        try task.run(); task.waitUntilExit()
+        XCTAssertEqual(task.terminationStatus, 0)
+    }
+
+    private func ssh(config: String, control: String, arguments: [String]) throws {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        task.arguments = ["-F", config, "-S", control] + arguments
+        task.standardOutput = FileHandle.nullDevice
+        try task.run(); task.waitUntilExit()
+        XCTAssertEqual(task.terminationStatus, 0)
+    }
+
     @MainActor private func waitUntil(_ condition: @MainActor () -> Bool) async -> Bool {
         for _ in 0..<160 {
             if condition() { return true }

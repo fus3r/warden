@@ -38,6 +38,7 @@ Warden data lives under `~/Library/Application Support/Warden` unless listed oth
 | Quota attribution | `quota-ledger.json` | Readings, use awaiting allocation, and daily project points for 90 days; unallocated use without a first reading waits at most eight days |
 | Activity | `activity.json` | Work/wait spans, times, states, project paths, session IDs, and approval tool names for 30 days |
 | SSH hosts | `remote-hosts.json` | Host IDs, destinations, display names and enabled flags; no credentials; snapshots stay in memory |
+| Shared SSH authentication | `ssh/` | OpenSSH control sockets restricted to your Mac account; no saved passwords, MFA codes or phone approvals |
 | Approval socket | `ipc/` | Local socket restricted to your user; command and question content stays in memory |
 | Local phone access | `Phone/certificate.json`, `Phone/devices.json` | Server certificate and key, and paired device secret hashes; owner-only access |
 | Relay phone devices | `Phone/remote-devices.json` | Private device credentials with owner-only access; prompt content stays in memory |

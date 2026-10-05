@@ -13,11 +13,11 @@ train-guard run --name warden-build -- ./Scripts/build-app.sh
 open build/Warden.app
 ```
 
-For the released **v0.4.0-beta.9** source tag, use its published wheel. It contains the Python source and MIT license; its SHA-256 is recorded in `SHA256SUMS.txt` and `manifest.json`.
+For the released **v0.4.0-beta.10** source tag, use its published wheel. It contains the Python source and MIT license; its SHA-256 is recorded in `SHA256SUMS.txt` and `manifest.json`.
 
 ```sh
 mkdir -p build/dependencies
-curl -fL https://github.com/fus3r/warden/releases/download/v0.4.0-beta.9/train_guard-0.5.1.dev0-py3-none-any.whl \
+curl -fL https://github.com/fus3r/warden/releases/download/v0.4.0-beta.10/train_guard-0.5.1.dev0-py3-none-any.whl \
   -o build/dependencies/train_guard-0.5.1.dev0-py3-none-any.whl
 export WARDEN_TRAIN_GUARD_WHEEL="$PWD/build/dependencies/train_guard-0.5.1.dev0-py3-none-any.whl"
 ./Scripts/build-app.sh
@@ -38,7 +38,7 @@ npm test --prefix Relay
 
 Use `./Scripts/build-app.sh debug` for a separate preview app. `WARDEN_FIXTURE=1 WARDEN_SHOW=tutorial build/WardenPreview.app/Contents/MacOS/Warden` opens the guide with sample sessions and isolated preview storage. The [release guide](releasing.md) covers packaging and checks on another Mac.
 
-The SSH integration test needs Docker. `train-guard run --name warden-ssh-qa -- python3 Scripts/verify-remote-ssh.py` builds an isolated Ubuntu OpenSSH server with disposable keys and fixture agents, then checks real SSH snapshots, privacy filtering, tmux mapping, an independently closed terminal client, and Swift connection loss/reconnection. It never changes owner SSH configuration. `--keep` retains the fixture for native preview checks; `--reuse --keep` reruns it, and `--cleanup` removes it. Native QA can pass its `ssh-config` with `WARDEN_SSH_CONFIG_FILE` only alongside an isolated `WARDEN_SUPPORT_DIR` in a debug build. No live provider subscription or external cluster is exercised by the fixture.
+The SSH integration test needs Docker. `train-guard run --name warden-ssh-qa -- python3 Scripts/verify-remote-ssh.py` builds an isolated Ubuntu OpenSSH server with disposable keys and fixture agents. It checks snapshots, privacy filtering, tmux/screen navigation, an independently closed terminal client, Swift reconnection, shared authentication with the fixture key revoked, expired access and manual sign-in recovery. It never changes owner SSH configuration. `--keep` retains the fixture for native preview checks; `--reuse --keep` reruns it, and `--cleanup` removes it. Native QA can pass its `ssh-config` with `WARDEN_SSH_CONFIG_FILE` only alongside an isolated `WARDEN_SUPPORT_DIR` in a debug build. No live provider subscription, phone approval service or external cluster is exercised by the fixture.
 
 Bug reports and focused pull requests are welcome. Include steps to reproduce and the Warden/macOS versions. Remove private conversation content, paths and pairing links from reports and screenshots.
 
