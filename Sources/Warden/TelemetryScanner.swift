@@ -413,10 +413,9 @@ final class TelemetryScanner: @unchecked Sendable {
             if name == "codex" { provider = .codex }
             else if name == "claude" { provider = .claude }
             else { continue }
-            // Codex's shared app-server daemon and its sandbox helpers host no session of their own, and can outlive
-            // every session in the folder they started from.
-            if provider == .codex, let arguments = ProcessDetails.arguments(of: pid),
-               arguments.contains("--managed-daemon") || arguments.contains("pid-update-loop") || arguments.dropFirst().first == "sandbox" {
+            // App servers also run beneath Codex's tools on the TUI's own TTY and cwd. Counting one as
+            // another agent makes the editor's exact terminal match ambiguous.
+            if provider == .codex, let arguments = ProcessDetails.arguments(of: pid), Self.isCodexService(arguments) {
                 continue
             }
             let surface: String
@@ -449,5 +448,10 @@ final class TelemetryScanner: @unchecked Sendable {
             return (agents, list.split(separator: ",").map(String.init))
         }
         return (agents, apps.sorted())
+    }
+
+    static func isCodexService(_ arguments: [String]) -> Bool {
+        arguments.contains("--managed-daemon") || arguments.contains("pid-update-loop")
+            || ["app-server", "sandbox"].contains(arguments.dropFirst().first ?? "")
     }
 }

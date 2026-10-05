@@ -3,6 +3,12 @@ import XCTest
 import WardenCore
 
 final class TelemetryScannerTests: XCTestCase {
+    func testToolSidecarServerIsNotAnotherCodexTerminalAgent() {
+        // Codex's computer-use tools start this server beneath the TUI, on the same TTY and cwd.
+        XCTAssertTrue(TelemetryScanner.isCodexService(["codex", "app-server", "--listen", "stdio"]))
+        XCTAssertFalse(TelemetryScanner.isCodexService(["codex", "resume", "3f5d880f-7ac4-42a9-a018-1c46a219eabf"]))
+    }
+
     func testStoppedAccountDoesNotReturnBridgeSessionsOrSavedLimits() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let previous = ProcessInfo.processInfo.environment["WARDEN_SUPPORT_DIR"]

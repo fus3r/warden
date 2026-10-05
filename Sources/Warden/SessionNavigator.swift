@@ -65,10 +65,12 @@ enum SessionNavigator {
                     return
                 }
                 if let bundleID {
-                    if editors.contains(bundleID), tty != nil, await EditorTerminalBridge.focus(pid: pid) { return }
+                    if editors.contains(bundleID) {
+                        if tty != nil, await EditorTerminalBridge.focus(pid: pid) { return }
+                        showMissingTerminal(session)
+                        return
+                    }
                     if let tty, selectTab(tty: tty, bundleID: bundleID) { return }
-                    // Without the optional editor bridge, keep the live agent's app in front. Opening
-                    // its cwd can create a different window when the terminal has changed directories.
                     if let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
                         let configuration = NSWorkspace.OpenConfiguration()
                         configuration.activates = true
@@ -80,10 +82,11 @@ enum SessionNavigator {
             // Codex daemon can still be waiting for the user in an existing editor terminal.
             if !session.ended, !editorProcesses.isEmpty || session.phase == .working || session.phase == .needsAttention {
                 if let bundleID = hostBundleID(for: session, processes: processes),
+                   !editors.contains(bundleID),
                    let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
                     app.activate()
                 } else {
-                    showError("This session may still be open, but Warden could not locate its terminal. Open its existing terminal to continue.")
+                    showMissingTerminal(session)
                 }
                 return
             }
@@ -159,6 +162,10 @@ enum SessionNavigator {
         alert.informativeText = message
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
+    }
+
+    private static func showMissingTerminal(_ session: AgentSession) {
+        showError("Warden could not locate the terminal for “\(session.title ?? session.project)”. Open its existing terminal to continue. For VS Code, check that Warden Terminal Focus is enabled in that window.")
     }
 
     /// True when the session's own Terminal or iTerm tab is the one in front, so you already see what it does.
