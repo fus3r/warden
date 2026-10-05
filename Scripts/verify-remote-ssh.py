@@ -178,6 +178,7 @@ def main():
     parser.add_argument("--cleanup", action="store_true")
     parser.add_argument("--prepare", action="store_true", help="Prepare the host for a separate Swift/native test run")
     parser.add_argument("--reuse", action="store_true", help="Use the fixture left by --keep")
+    parser.add_argument("--feed", action="store_true", help="Also verify the memory-only publisher through the local Cloudflare Worker on port 8788")
     args = parser.parse_args()
     if args.cleanup:
         cleanup(json.loads((QA / "environment.json").read_text()))
@@ -187,6 +188,9 @@ def main():
         verify(env)
         if not args.prepare:
             env["WARDEN_SSH_TEST_COMMAND"] = str(QA / "navigation-command.json")
+            if args.feed:
+                env["WARDEN_FEED_RELAY_URL"] = "http://127.0.0.1:8788"
+                env["WARDEN_FEED_PUBLISHER_URL"] = "http://host.docker.internal:8788"
             run(["swift", "test", "--filter", "RemoteConnectionTests/testLinuxSSH"], cwd=ROOT, env=dict(os.environ, **env))
             verify_navigation(env)
     finally:

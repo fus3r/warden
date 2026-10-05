@@ -6,6 +6,10 @@ struct RemoteSettings: View {
     @State private var destination = ""
     @State private var name = ""
     @State private var error: String?
+    @State private var feedHost: RemoteSSHHost?
+    @State private var relay = Bundle.main.object(forInfoDictionaryKey: "WardenAgentRelayURL") as? String ?? ""
+    @State private var preparing = false
+    @State private var feedError: String?
 
     var body: some View {
         Form {
@@ -47,6 +51,9 @@ struct RemoteSettings: View {
                         let state = connections.states[host.id]
                         Text("\(host.destination) · \(state?.phase.rawValue ?? "Paused")")
                             .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                        if host.feed != nil {
+                            Text("HTTPS feed · SSH can be disconnected").font(.caption).foregroundStyle(.secondary)
+                        }
                         if let received = state?.receivedAt {
                             Text("Last update \(received.formatted(date: .omitted, time: .standard))")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -62,20 +69,54 @@ struct RemoteSettings: View {
                             Spacer()
                             Button("Remove") { connections.remove(host) }
                         }
+                        HStack {
+                            Button(host.feed == nil ? "Follow after SSH expires…" : "Start Temporary Collector…") {
+                                feedHost = host; feedError = nil
+                                if let value = host.feed?.relay { relay = value }
+                            }
+                            if host.feed != nil { Button("Use SSH Monitoring") { connections.useSSH(host) } }
+                        }
                     }.padding(.vertical, 4)
                 }
             }
             Section("Returning to an agent") {
                 Text("Use tmux to reopen the exact pane, or screen to return to its existing session and window list. Without either, Warden can focus a single matching SSH tab in Terminal or iTerm. If several tabs connect to the same host, return to the agent's tab yourself.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("Only filtered states, titles, paths and counters cross SSH. Questions show a generic indicator; answer in the remote terminal. Remote quotas are shown separately. Token history and train-guard controls cover this Mac.")
+                Text("Only filtered states, titles, paths and counters cross SSH or enter the encrypted HTTPS feed. Questions show a generic indicator; answer in the remote terminal. Remote quotas are shown separately. Token history and train-guard controls cover this Mac.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Pausing or removing a host closes monitoring only. Remote agents keep running. Monitoring resumes when Warden reconnects; it pauses while this Mac is asleep.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("Phone approval stays manual in your usual authentication app. Warden reuses the SSH connection you approved. If the server expires it, sign in again; agents in tmux or screen can keep running while their state is unavailable.")
+                Text("For expiring SSH access, choose Follow after SSH expires. A temporary collector sends encrypted states over HTTPS without installing files or packages on the server. Opening the agent's terminal still uses ordinary SSH authentication.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+        .sheet(item: $feedHost) { host in
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Follow after SSH expires").font(.headline)
+                Text("Sign in once to start a temporary collector in memory. It keeps sending encrypted states after SSH closes. Nothing is installed on the server.")
+                TextField("HTTPS relay", text: $relay, prompt: Text("https://warden-agent-relay.example.workers.dev"))
+                Text("The relay passes ciphertext; only this Mac can read it. The server needs Python 3.8+, its existing OpenSSL library and outbound HTTPS. The cluster must allow the temporary process to survive logout.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Keep Warden open and this Mac awake to receive alerts. Pausing or removing this host asks its collector to stop at its next relay request. It also exits after a day without reaching the relay, or seven days without this Mac, without touching your agents.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let feedError { Text(feedError).font(.caption).foregroundStyle(.red) }
+                HStack {
+                    Button("Cancel") { feedHost = nil }.disabled(preparing)
+                    Spacer()
+                    if preparing { ProgressView().controlSize(.small) }
+                    Button("Start in Terminal") {
+                        preparing = true; feedError = nil
+                        Task { @MainActor in
+                            do {
+                                let command = try await connections.feedCommand(for: host, relay: relay.trimmingCharacters(in: .whitespacesAndNewlines))
+                                SessionNavigator.runInTerminal(command); feedHost = nil
+                            } catch { feedError = error.localizedDescription }
+                            preparing = false
+                        }
+                    }.disabled(preparing || RemoteFeed.url(relay.trimmingCharacters(in: .whitespacesAndNewlines)) == nil)
+                }
+            }.padding(24).frame(width: 480)
+        }
     }
 }

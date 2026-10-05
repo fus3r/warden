@@ -6,12 +6,14 @@ public struct RemoteSSHHost: Codable, Equatable, Identifiable {
     public var destination: String
     public var name: String
     public var enabled: Bool
+    public var feed: RemoteFeed?
 
     public init(id: String = UUID().uuidString, destination: String, name: String? = nil, enabled: Bool = true) {
         self.id = id
         self.destination = destination
         self.name = name.flatMap { $0.isEmpty ? nil : $0 } ?? destination
         self.enabled = enabled
+        self.feed = nil
     }
 
     public static func validDestination(_ value: String) -> Bool {
@@ -172,7 +174,7 @@ public struct RemoteSnapshot: Decodable {
             session.remote = RemoteSessionOrigin(host: host, sessionID: session.id, accountFolder: file.accountFolder, tmux: file.tmux, screen: file.screen)
             session.id = "ssh:\(host.id):\(session.provider.rawValue):\(session.id)"
             session.host = nil
-            session.surface = "SSH · \(host.name)"
+            session.surface = "\(host.feed == nil ? "SSH" : "HTTPS") · \(host.name)"
             session.account = accountLabel(host: host, account: session.account)
             session.updatedAt = session.updatedAt.addingTimeInterval(clockOffset)
             session.turnStartedAt = session.turnStartedAt?.addingTimeInterval(clockOffset)

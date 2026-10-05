@@ -6,7 +6,7 @@ enum RemoteSessionNavigator {
     static func open(_ session: AgentSession) {
         guard let remote = session.remote else { return }
         if !remote.connected {
-            show("SSH monitoring is disconnected from \(remote.label). Reconnect in Warden Settings, or return to your existing remote terminal.")
+            show("Remote monitoring is disconnected from \(remote.label). Reconnect in Warden Settings, or return to your existing remote terminal.")
             return
         }
         let path = RemoteSSHAuthentication.controlPath(hostID: remote.hostID, destination: remote.destination)

@@ -15,7 +15,7 @@ struct RemoteHostState {
     var snapshot: RemoteSnapshot?
 }
 
-/// One dedicated OpenSSH connection per configured host. Closing a user's terminal does not close this connection.
+/// Each host uses a dedicated SSH connection or an encrypted HTTPS feed independently of the user's terminal.
 @MainActor
 final class RemoteConnections: ObservableObject {
     @Published private(set) var hosts: [RemoteSSHHost] = []
@@ -26,6 +26,7 @@ final class RemoteConnections: ObservableObject {
     private let collector: URL?
     private let configuration: URL?
     private var streams: [String: RemoteSSHStream] = [:]
+    private var feeds: [String: RemoteFeedLink] = [:]
     private var generations: [String: UUID] = [:]
     private var attemptedSockets: [String: UInt64] = [:]
     private var timer: Timer?
@@ -39,7 +40,7 @@ final class RemoteConnections: ObservableObject {
         if FileManager.default.fileExists(atPath: storage.path) {
             do {
                 hosts = try JSONDecoder().decode([RemoteSSHHost].self, from: Data(contentsOf: storage))
-                guard hosts.allSatisfy({ RemoteSSHHost.validDestination($0.destination) }), Set(hosts.map(\.id)).count == hosts.count else {
+                guard hosts.allSatisfy({ RemoteSSHHost.validDestination($0.destination) && ($0.feed?.valid ?? true) }), Set(hosts.map(\.id)).count == hosts.count else {
                     throw CocoaError(.fileReadCorruptFile)
                 }
             } catch {
@@ -80,6 +81,7 @@ final class RemoteConnections: ObservableObject {
         changed[index].enabled = enabled
         guard save(changed) else { return }
         stop(host.id)
+        if !enabled, let feed = host.feed { Task { _ = try? await RemoteFeedLink.request(feed, method: "PATCH", paused: true) } }
         states[host.id] = RemoteHostState(phase: enabled ? .connecting : .paused)
         if enabled, started { connect(changed[index]) }
         onChange?()
@@ -88,6 +90,8 @@ final class RemoteConnections: ObservableObject {
     func remove(_ host: RemoteSSHHost) {
         guard save(hosts.filter { $0.id != host.id }) else { return }
         stop(host.id)
+        if let feed = host.feed { Task { _ = try? await RemoteFeedLink.request(feed, method: "DELETE") } }
+        removeBootstrap(for: host)
         states.removeValue(forKey: host.id)
         onChange?()
     }
@@ -114,6 +118,66 @@ final class RemoteConnections: ObservableObject {
 
     func controlPath(for host: RemoteSSHHost) -> URL {
         RemoteSSHAuthentication.controlPath(hostID: host.id, destination: host.destination, root: storage.deletingLastPathComponent())
+    }
+
+    /// The bootstrap is a private file on this Mac, delivered over SSH stdin, never installed on Linux.
+    func feedCommand(for host: RemoteSSHHost, relay: String, publisherRelay: String? = nil) async throws -> String {
+        var allowLocal = false
+        #if DEBUG
+        allowLocal = true
+        #endif
+        guard let url = RemoteFeed.url(relay, allowLocalHTTP: allowLocal), let collector,
+              let index = hosts.firstIndex(where: { $0.id == host.id }) else { throw URLError(.badURL) }
+        let feed = RemoteFeed(relay: url.absoluteString)
+        _ = try await RemoteFeedLink.request(feed, method: "PUT", value: ["publisherToken": feed.publisherToken,
+            "challenge": RemotePhoneCrypto.token(), "usageProviders": RemoteSSHStream.usageProviders])
+        let helper = collector.deletingLastPathComponent().appendingPathComponent("warden-feed.py")
+        let source = try String(contentsOf: collector, encoding: .utf8)
+        guard let entry = source.range(of: "\nif __name__ == \"__main__\":", options: .backwards) else { throw CocoaError(.fileReadCorruptFile) }
+        var config: [String: Any] = ["relay": feed.relay, "room": feed.room, "publisherToken": feed.publisherToken, "key": feed.key]
+        #if DEBUG
+        config["relay"] = publisherRelay ?? feed.relay
+        config["localTest"] = allowLocal && url.scheme == "http"
+        #endif
+        let data = try JSONSerialization.data(withJSONObject: config)
+        let encoded = data.base64EncodedString()
+        let code = String(source[..<entry.lowerBound]) + "\n" + (try String(contentsOf: helper, encoding: .utf8))
+            + "\nif __name__ == \"__main__\":\n    sys.exit(feed_main(json.loads(base64.b64decode(\"\(encoded)\"))))\n"
+        let folder = storage.deletingLastPathComponent().appendingPathComponent("remote-bootstrap")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: folder.path)
+        let bootstrap = folder.appendingPathComponent(controlPath(for: host).lastPathComponent + ".py")
+        try code.write(to: bootstrap, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: bootstrap.path)
+        var changed = hosts
+        changed[index].feed = feed; changed[index].enabled = true
+        guard save(changed) else { throw CocoaError(.fileWriteUnknown) }
+        stop(host.id)
+        if let old = host.feed { Task { _ = try? await RemoteFeedLink.request(old, method: "DELETE") } }
+        if started { connect(changed[index]) }
+        let path = controlPath(for: host)
+        try RemoteSSHAuthentication.prepare(path)
+        let args = ["/usr/bin/ssh"] + (configuration.map { ["-F", $0.path] } ?? []) + ["-T", "-S", path.path,
+            "-o", "ControlMaster=auto", "-o", "ControlPersist=5m", "-o", "BatchMode=no", "-o", "StrictHostKeyChecking=yes",
+            "-o", "ClearAllForwardings=yes", "-o", "ForwardAgent=no", "-o", "RemoteCommand=none", host.destination, "python3 -u -"]
+        return args.map(SessionNavigation.shellQuote).joined(separator: " ") + " < " + SessionNavigation.shellQuote(bootstrap.path)
+    }
+
+    func useSSH(_ host: RemoteSSHHost) {
+        var changed = hosts
+        guard let index = changed.firstIndex(where: { $0.id == host.id }) else { return }
+        changed[index].feed = nil
+        guard save(changed) else { return }
+        stop(host.id)
+        if let feed = host.feed { Task { _ = try? await RemoteFeedLink.request(feed, method: "DELETE") } }
+        removeBootstrap(for: host)
+        if host.enabled, started { connect(changed[index]) }
+    }
+
+    private func removeBootstrap(for host: RemoteSSHHost) {
+        let path = storage.deletingLastPathComponent().appendingPathComponent("remote-bootstrap")
+            .appendingPathComponent(controlPath(for: host).lastPathComponent + ".py")
+        try? FileManager.default.removeItem(at: path)
     }
 
     func refreshUsagePreferences() {
@@ -149,20 +213,21 @@ final class RemoteConnections: ObservableObject {
         var session = value
         session.remote?.connected = false
         session.phase = .unknown; session.attention = nil; session.phaseEvidence = .inferred
-        session.detail = "SSH disconnected; last known state unavailable"
+        session.detail = "Remote monitoring disconnected; last known state unavailable"
         session.activeSubagents = 0; session.resumesAt = nil; session.retry = nil
         return session
     }
 
     func shutdown() {
         started = false; timer?.invalidate(); timer = nil
-        for id in Array(streams.keys) { stop(id) }
+        for id in Set(streams.keys).union(feeds.keys) { stop(id) }
     }
 
     private func save(_ values: [RemoteSSHHost]) -> Bool {
         do {
             try FileManager.default.createDirectory(at: storage.deletingLastPathComponent(), withIntermediateDirectories: true)
             try JSONEncoder().encode(values).write(to: storage, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: storage.path)
             hosts = values; storageError = nil
             return true
         } catch {
@@ -174,6 +239,7 @@ final class RemoteConnections: ObservableObject {
     private func stop(_ id: String) {
         generations.removeValue(forKey: id)
         streams.removeValue(forKey: id)?.stop()
+        feeds.removeValue(forKey: id)?.stop()
     }
 
     private func connect(_ host: RemoteSSHHost) {
@@ -183,6 +249,23 @@ final class RemoteConnections: ObservableObject {
         state.phase = state.snapshot == nil ? .connecting : .reconnecting
         state.retryAt = nil; state.message = nil
         states[host.id] = state
+        if let feed = host.feed {
+            state.message = "Waiting for the temporary collector. Complete Start Temporary Collector in Terminal once."
+            states[host.id] = state
+            let link = RemoteFeedLink(feed: feed, usageProviders: RemoteSSHStream.usageProviders)
+            feeds[host.id] = link
+            link.start { [weak self] snapshot in
+                guard let self, self.generations[host.id] == generation else { return }
+                self.states[host.id] = RemoteHostState(phase: .connected, receivedAt: Date(), snapshot: snapshot)
+                self.onChange?()
+            } failed: { [weak self] message in
+                guard let self, self.generations[host.id] == generation else { return }
+                var state = self.states[host.id] ?? RemoteHostState()
+                state.phase = .reconnecting; state.message = message
+                self.states[host.id] = state; self.onChange?()
+            }
+            onChange?(); return
+        }
         let path = controlPath(for: host)
         let socket = RemoteSSHAuthentication.socketIdentity(path)
         attemptedSockets[host.id] = socket
@@ -214,19 +297,20 @@ final class RemoteConnections: ObservableObject {
         refreshUsagePreferences()
         let now = Date()
         for host in hosts where host.enabled {
-            if states[host.id]?.phase == .authenticationRequired,
+            if host.feed == nil, states[host.id]?.phase == .authenticationRequired,
                let socket = RemoteSSHAuthentication.socketIdentity(controlPath(for: host)), socket != attemptedSockets[host.id] {
                 connect(host)
             }
             if let state = states[host.id], state.phase == .connected, let received = state.receivedAt,
-               now.timeIntervalSince(received) > 45 {
-                stop(host.id)
+               now.timeIntervalSince(received) > (host.feed == nil ? 45 : 90) {
+                if host.feed == nil { stop(host.id) }
                 var state = state
-                state.phase = .reconnecting; state.message = "No SSH telemetry for 45 seconds."; state.retryAt = now
+                state.phase = .reconnecting; state.message = host.feed == nil ? "No SSH telemetry for 45 seconds." : "No HTTPS telemetry for 90 seconds. Start the temporary collector again if the server stopped it."
+                state.retryAt = host.feed == nil ? now : nil
                 states[host.id] = state
                 onChange?()
             }
-            if streams[host.id] == nil, let retry = states[host.id]?.retryAt, retry <= now { connect(host) }
+            if host.feed == nil, streams[host.id] == nil, let retry = states[host.id]?.retryAt, retry <= now { connect(host) }
         }
     }
 }

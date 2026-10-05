@@ -1,5 +1,7 @@
 # Warden phone service
 
+The Node service also supports encrypted agent feeds at `/v1/feeds/` for monitoring after SSH expires. The agent-only [Cloudflare Worker](Worker/README.md) is the simpler free-plan hosting option for that feature. The phone service below is separate.
+
 The publisher hosts this service once. Users scan a QR code in Warden and can then use the phone page over Wi-Fi or mobile data. They do not install a VPN, configure a server, or trust a local certificate. The existing local-network mode remains available.
 
 The Mac makes an outbound WebSocket connection. Each phone gets independent 256-bit pairing and encryption keys. A QR expires after five minutes and is exchanged for new credentials when used. HKDF-SHA256 derives separate AES-256-GCM keys for each direction. Connection challenges and request IDs bind answers to the current connection. The relay routes ciphertext without storing it. Saved routing tokens are hashed; the relay stores push subscriptions and last-connection times. Push notifications contain only a generic notice. The phone renders decrypted state in memory; local storage holds its pairing credentials, not session content.

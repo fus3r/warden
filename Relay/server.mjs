@@ -7,6 +7,7 @@ import { timingSafeEqual, createHash } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { isIP } from 'node:net';
 import webpush from 'web-push';
+import { createFeeds } from './feeds.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -51,9 +52,20 @@ export function createRelay({ dataDirectory, publicOrigin, phoneDirectory = reso
     assets.set('/' + name, { data, type });
   }
   for (const name of ['remote.js', 'sw.js']) assets.set('/' + name, { data: readFileSync(resolve(here, 'public', name)), type: 'text/javascript' });
+  const feedFile = dataDirectory && resolve(dataDirectory, 'feeds.json');
+  const feeds = createFeeds({ records: feedFile && existsSync(feedFile) ? JSON.parse(readFileSync(feedFile, 'utf8')) : [], save: records => {
+    if (!feedFile) return;
+    writeFileSync(feedFile + '.new', JSON.stringify(records), { mode: 0o600 }); renameSync(feedFile + '.new', feedFile);
+  } });
   const server = http.createServer((req, res) => {
     let path;
     try { path = new URL(req.url, 'http://localhost').pathname; } catch { res.writeHead(400).end(); return; }
+    if (path.startsWith('/v1/feeds/')) {
+      const forwarded = req.headers['x-warden-client-ip'];
+      const address = trustProxy && typeof forwarded === 'string' && isIP(forwarded) ? forwarded : req.socket.remoteAddress;
+      feeds.handle(req, res, path, address).catch(() => { if (!res.destroyed) res.writeHead(503, headers).end(); });
+      return;
+    }
     if (req.method !== 'GET') { res.writeHead(405, headers).end(); return; }
     if (path === '/health') { res.writeHead(200, { ...headers, 'Content-Type': 'application/json' }).end('{"ok":true}'); return; }
     if (path === '/config') { res.writeHead(200, { ...headers, 'Content-Type': 'application/json' }).end(JSON.stringify({ vapidPublicKey: vapidKeys?.publicKey || null })); return; }
@@ -145,7 +157,7 @@ export function createRelay({ dataDirectory, publicOrigin, phoneDirectory = reso
     try { persist(); } catch { console.error('Could not save relay pairings. Check storage permissions and free space.'); }
   }, 30000);
   maintenance.unref();
-  return { server, close: async () => { clearInterval(maintenance); for (const ws of wss.clients) ws.terminate(); await new Promise(resolve => wss.close(resolve)); await new Promise(resolve => server.close(resolve)); } };
+  return { server, close: async () => { feeds.close(); clearInterval(maintenance); for (const ws of wss.clients) ws.terminate(); await new Promise(resolve => wss.close(resolve)); await new Promise(resolve => server.close(resolve)); } };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

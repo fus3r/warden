@@ -11,3 +11,4 @@ Relay/data/
 .env
 .env.*
 site/
+.wrangler/

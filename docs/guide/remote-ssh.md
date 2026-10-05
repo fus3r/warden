@@ -22,7 +22,27 @@ The authentication method stays managed by OpenSSH and the server. Warden neithe
 
 If the server closes the connection or requires renewed approval, Warden shows **Authentication required**, retains the last observations as unavailable, and stops automatic authentication attempts. Choose **Authenticate in Terminal** again and approve the login yourself. If you sign in separately using your own configured shared connection, choose **Retry** afterward.
 
-A cluster that forcibly closes all approved connections after twelve hours still requires another login. Warden cannot receive live observations while no authorized route to the host remains. Jobs and agents in tmux or screen can continue independently; Warden reads their current state after reconnecting. Older logs belonging to a still-running process remain eligible within the collector's bounded file limit.
+With SSH monitoring, a cluster that forcibly closes all approved connections after twelve hours requires another login. Jobs and agents in tmux or screen can continue independently; Warden reads their current state after reconnecting. Older logs belonging to a still-running process remain eligible within the collector's bounded file limit. The HTTPS mode below provides a separate route for monitoring.
+
+## Follow after SSH expires
+
+!!! note "Available in the next build"
+    The downloadable build 10 uses SSH monitoring. The memory-only HTTPS collector described here is being prepared for the next release.
+
+For long runs on a cluster with expiring SSH access, Warden can start a **temporary collector in memory** during one authorized login. After that, the collector sends end-to-end encrypted states to a HTTPS relay independently of SSH. Closing a terminal or refusing a new SSH login does not stop this route.
+
+No Warden code, package, provider hook, SSH key or service is installed on the remote host. The collector runs under your own Linux account, using Python 3.8+ and its existing system OpenSSL library. Its source and Warden pairing material arrive over SSH stdin and stay in the process's memory. Existing provider CLIs continue to manage their own usage-read runtime files. A server reboot or a cluster policy that terminates detached processes ends the collector; this mode does not override either policy.
+
+1. Configure a Warden HTTPS relay. The publisher can provide one, or deploy [the free-plan Cloudflare Worker](https://github.com/fus3r/warden/tree/main/Relay/Worker) or the self-hosted Node relay described in the repository. No extra server or software is needed on the cluster.
+2. Add the host in **Settings → SSH**, then choose **Follow after SSH expires…**.
+3. Enter the verified relay origin and choose **Start in Terminal**. Complete the ordinary SSH and phone approval once. The command sends the private bootstrap file from this Mac over stdin; it never copies a script to Linux.
+4. When the feed connects, the host shows **HTTPS feed · SSH can be disconnected**. Start your agents in tmux or screen so they survive logout too.
+
+The relay receives only opaque AES-256-GCM packets. The Mac holds the decryption key, interprets the same redacted metadata as SSH mode, and generates its usual alerts. The relay stores routing-token hashes and liveness configuration, without the key or conversation history. Cloudflare also replaces one stored encrypted packet per host to survive runtime hibernation; packets older than ninety seconds are deleted on the next feed read. The self-hosted Node relay keeps its packet in memory. A fresh Mac connection challenge, pause or removal clears the packet. The challenge and increasing packet counter prevent retained ciphertext from presenting an old state as a new heartbeat.
+
+Telemetry is published and read every twenty seconds. A missed feed becomes unavailable after ninety seconds, without producing a completion alert. Keep Warden open and the Mac awake for alerts. The collector can remain active while the Mac sleeps; it stops if the Mac has not returned for seven days, or it cannot reach the relay for twenty-four hours. Pausing or removing the host stops its collector at the next successful request without stopping agents. To resume a paused collector, use **Start Temporary Collector…** again.
+
+This avoids renewed SSH approval **for monitoring**. Opening the agent's terminal or responding to it still requires whatever SSH authentication the cluster normally enforces. The server must permit outbound HTTPS to the chosen relay and allow the detached process to survive logout. If all permitted network routes and event sources are unavailable, Warden cannot observe live events remotely.
 
 ## Return to the right terminal
 
@@ -55,6 +75,6 @@ Provider quotas are polled at most every ten minutes and kept distinct by host/a
 
 Warden reconnects automatically after an SSH failure. While disconnected, retained sessions show an unknown state, not a completed turn. Last quota readings keep their original observation time. Missing heartbeats expire after 45 seconds.
 
-Monitoring pauses while the Mac sleeps or Warden is closed. Keeping an SSH terminal open is unnecessary while Warden runs, but the Mac still needs network access to the server. **Keep Awake** can prevent idle sleep during observed work; an unresolved disconnect is not treated as all work being done.
+Mac observations and alerts pause while the Mac sleeps or Warden is closed. Keeping an SSH terminal open is unnecessary while Warden runs, but the Mac still needs network access to the server or the configured relay. **Keep Awake** can prevent idle sleep during observed work; an unresolved disconnect is not treated as all work being done.
 
-Turn a host off to pause monitoring, or choose **Remove** to forget it. Both close only Warden's SSH connection. They do not stop remote agents or remove their logs. Host configuration is stored locally in `remote-hosts.json`; it contains destinations and display names, without credentials.
+Turn a host off to pause monitoring, or choose **Remove** to forget it. In SSH mode, both close Warden's monitoring connection. In HTTPS mode, both request that the temporary collector stop when it next reaches the relay. They do not stop remote agents or remove their logs. Host configuration is stored locally in the private `remote-hosts.json`; it contains destinations and display names, plus generated Warden pairing material for HTTPS feeds. It contains no SSH or provider credentials.

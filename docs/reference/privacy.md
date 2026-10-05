@@ -37,7 +37,8 @@ Warden data lives under `~/Library/Application Support/Warden` unless listed oth
 | Copied-reply deduplication | `usage-replies.json` | Reply hashes and counting ownership for 40 days |
 | Quota attribution | `quota-ledger.json` | Readings, use awaiting allocation, and daily project points for 90 days; unallocated use without a first reading waits at most eight days |
 | Activity | `activity.json` | Work/wait spans, times, states, project paths, session IDs, and approval tool names for 30 days |
-| SSH hosts | `remote-hosts.json` | Host IDs, destinations, display names and enabled flags; no credentials; snapshots stay in memory |
+| Remote hosts | `remote-hosts.json` | Host IDs, destinations, names and enabled flags; optional generated relay pairing tokens and encryption key, restricted to your Mac account; no SSH or provider credentials; snapshots stay in memory |
+| Temporary remote collector bootstrap | `remote-bootstrap/` | Private source and generated pairing material on this Mac, delivered over SSH stdin; no Warden file installed on Linux |
 | Shared SSH authentication | `ssh/` | OpenSSH control sockets restricted to your Mac account; no saved passwords, MFA codes or phone approvals |
 | Approval socket | `ipc/` | Local socket restricted to your user; command and question content stays in memory |
 | Local phone access | `Phone/certificate.json`, `Phone/devices.json` | Server certificate and key, and paired device secret hashes; owner-only access |
@@ -57,6 +58,7 @@ All-jobs exceptions write only an enabled flag and an optional expiry time to `~
 | --- | --- |
 | Account usage reads | The provider CLI's authenticated usage request, using its own sign-in; Warden sends no prompt |
 | Remote SSH monitoring | Bundled collector code sent to a host you add; filtered states and counters return over SSH. Remote CLIs perform their own prompt-free account usage reads. No data goes to a Warden service |
+| Optional memory-only HTTPS monitoring | After one SSH login, a temporary Linux process sends redacted telemetry encrypted for this Mac through the configured relay. Routing hashes and liveness configuration persist. Cloudflare replaces one stored opaque packet per host; packets older than 90 seconds are deleted at the next feed read. The Node relay keeps its latest packet in memory. No encryption key or conversation content reaches either relay |
 | Provider status checks | A request to `status.claude.com` or `status.openai.com`, with no cookies or session details, at most every five minutes while a relevant failure is observed |
 | Local paired phone | Session details and answers encrypted over HTTPS directly between Mac and phone |
 | Self-hosted relay | End-to-end encrypted packets; the relay keeps routing-token hashes, last-connection times, and push subscriptions, without session history |

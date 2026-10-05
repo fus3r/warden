@@ -51,6 +51,16 @@ PY_RUNTIME
 rm -rf "$app/Contents/Helpers/TrainGuard" "$app/Contents/Helpers/TrainGuard.app"
 ditto "$runtime/TrainGuard.app" "$app/Contents/Helpers/TrainGuard.app"
 cp Resources/Info.plist "$app/Contents/Info.plist"
+if [[ -n "${WARDEN_AGENT_RELAY_URL:-}" ]]; then
+    python3 - "$WARDEN_AGENT_RELAY_URL" <<'PY_AGENT_RELAY'
+from urllib.parse import urlsplit
+import sys
+url = urlsplit(sys.argv[1])
+if url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment or url.path not in ('', '/'):
+    raise SystemExit('WARDEN_AGENT_RELAY_URL must be an HTTPS origin without credentials or a path.')
+PY_AGENT_RELAY
+    plutil -insert WardenAgentRelayURL -string "$WARDEN_AGENT_RELAY_URL" "$app/Contents/Info.plist"
+fi
 if [[ -n "${WARDEN_PHONE_RELAY_URL:-}" ]]; then
     python3 - "$WARDEN_PHONE_RELAY_URL" <<'PY_RELAY'
 from urllib.parse import urlsplit
@@ -79,6 +89,7 @@ cp -R Resources/Phone "$app/Contents/Resources/Phone"
 rm -rf "$app/Contents/Resources/Remote"
 mkdir -p "$app/Contents/Resources/Remote"
 cp Resources/Remote/warden-remote.py "$app/Contents/Resources/Remote/"
+cp Resources/Remote/warden-feed.py "$app/Contents/Resources/Remote/"
 cp LICENSE NOTICE.md "$app/Contents/Resources/"
 
 iconset="$project_dir/build/Warden.iconset"
