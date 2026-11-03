@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import OSLog
 import WardenCore
 
 /// The moments an alert can play a sound for.
@@ -152,6 +153,7 @@ struct Sound: Identifiable, Hashable {
 final class SoundLibrary: ObservableObject {
     static let silent = "none"
     static let folder = WardenPaths.support.appendingPathComponent("Sounds", isDirectory: true)
+    private static let log = Logger(subsystem: "com.fus3r.Warden", category: "sounds")
 
     @Published private(set) var added: [Sound] = []
     private let queue = AVQueuePlayer()
@@ -178,13 +180,23 @@ final class SoundLibrary: ObservableObject {
     /// Plays an alert's sound after any still playing, so two alerts do not talk over each other.
     func play(_ line: VoiceLine) {
         let id = choice(for: line)
-        guard id != Self.silent, let url = url(for: id) ?? url(for: line.standard) else { return }
+        guard id != Self.silent else { return }
+        let selected = url(for: id)
+        guard let url = selected ?? url(for: line.standard) else {
+            Self.log.error("No audio file for alert \(line.rawValue, privacy: .public)")
+            return
+        }
+        let clip = Sound.bank.first { $0.id == (selected == nil ? line.standard : id) }?.id ?? "custom"
+        // Only event and bundled clip IDs reach the local log, never chat text or custom filenames.
+        Self.log.notice("Alert \(line.rawValue, privacy: .public): clip \(clip, privacy: .public), fallback \(selected == nil)")
         queue.insert(AVPlayerItem(url: url), after: nil)
         queue.play()
     }
 
     func preview(_ id: String) {
         guard let url = url(for: id) else { return }
+        let clip = Sound.bank.first { $0.id == id }?.id ?? "custom"
+        Self.log.notice("Preview: clip \(clip, privacy: .public)")
         previewer.replaceCurrentItem(with: AVPlayerItem(url: url))
         previewer.play()
     }

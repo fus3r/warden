@@ -34,6 +34,18 @@ public enum ClaudeAgentView {
         }
     }
 
+    /// The list also contains saved background jobs whose blocked state can survive for weeks. It adds
+    /// state to sessions with recent activity, but is not evidence that an unlisted conversation is live.
+    public static func applying(_ entries: [AgentViewEntry], to sessions: [AgentSession], readAt: Date) -> [AgentSession] {
+        var result = sessions
+        for entry in entries {
+            guard let id = entry.sessionID,
+                  let index = result.firstIndex(where: { $0.provider == .claude && $0.id == id }) else { continue }
+            result[index] = merge(result[index], entry: entry, readAt: readAt)
+        }
+        return result
+    }
+
     /// Adds what the reading knows and the log cannot show: the session's process, and waits such as a sandbox
     /// request, an open dialog, or a blocked background session. A log that moved on since the reading wins.
     public static func merge(_ session: AgentSession, entry: AgentViewEntry, readAt: Date) -> AgentSession {
@@ -42,8 +54,8 @@ public enum ClaudeAgentView {
             result.host = SessionHost(pid: pid, tty: result.host?.tty, bundleID: result.host?.bundleID,
                                       termProgram: result.host?.termProgram)
         }
-        if entry.isBackground { result.backgroundID = entry.backgroundID }
-        guard !session.ended, session.updatedAt <= readAt.addingTimeInterval(2) else { return result }
+        if entry.isBackground, !session.ended { result.backgroundID = entry.backgroundID }
+        guard !session.ended, session.updatedAt <= readAt else { return result }
         if entry.isWaiting, session.phase != .needsAttention {
             result.phase = .needsAttention
             result.phaseEvidence = .provider

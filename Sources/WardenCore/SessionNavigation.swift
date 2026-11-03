@@ -2,6 +2,13 @@ import Foundation
 
 /// The evidence needed to return to a session, without guessing among agents in the same folder.
 public enum SessionNavigation {
+    /// Desktop Codex conversations have no terminal to focus. Its registered deep link opens the exact thread.
+    public static func desktopURL(for session: AgentSession) -> URL? {
+        guard session.remote == nil, session.provider == .codex, session.surface == "ChatGPT",
+              session.account == nil, UUID(uuidString: session.id) != nil else { return nil }
+        return URL(string: "codex://threads/\(session.id)")
+    }
+
     public static func process(for session: AgentSession, in processes: [AgentProcess],
                                openFiles: String = "", terminalNames: [Int: String] = [:]) -> AgentProcess? {
         guard !session.ended else { return nil }

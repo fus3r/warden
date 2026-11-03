@@ -5,6 +5,22 @@ import XCTest
 final class SessionNavigationTests: XCTestCase {
     private let id = "3f5d880f-7ac4-42a9-a018-1c46a219eabf"
 
+    func testDesktopConversationOpensItsExactThreadWithoutLookingForATerminal() {
+        var session = AgentSession(id: id, provider: .codex, surface: "ChatGPT", cwd: "/project",
+                                   phase: .needsAttention, updatedAt: Date())
+        XCTAssertEqual(SessionNavigation.desktopURL(for: session)?.absoluteString, "codex://threads/\(id)")
+        session.ended = true
+        XCTAssertNotNil(SessionNavigation.desktopURL(for: session), "A saved desktop chat opens in the same app.")
+        session.account = "work"
+        XCTAssertNil(SessionNavigation.desktopURL(for: session), "A deep link must not silently switch to another account.")
+        session.account = nil
+        session.surface = "Terminal"
+        XCTAssertNil(SessionNavigation.desktopURL(for: session))
+        session.surface = "ChatGPT"
+        session.id = "invalid/path"
+        XCTAssertNil(SessionNavigation.desktopURL(for: session))
+    }
+
     func testClosedSDKSessionAtRootResumesItsOwnConversation() throws {
         let session = AgentSession(id: id, provider: .claude, surface: "Terminal", cwd: "/", updatedAt: Date())
         let unrelated = AgentProcess(id: 101, provider: .claude, surface: "Terminal", cwd: "/")

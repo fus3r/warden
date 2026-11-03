@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 beta (build 13)
+
+- Stop saved Claude background jobs without recent conversation activity from reappearing as live sessions.
+- Keep cached Claude waits from replacing newer prompts and triggering incorrect alerts; resume closed conversations without attaching to expired background jobs.
+- Open Codex conversations from the ChatGPT desktop app through their exact chat links.
+- Trace alert and preview sound choices locally without recording conversation content or custom filenames. A specific wrong-voice report remains unconfirmed.
+
 ## 0.4.0 beta (build 12)
 
 - Open setup guides on the official documentation site from the README, downloads and release notes.

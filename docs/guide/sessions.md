@@ -28,9 +28,13 @@ Session names come from Claude Code's title or session name and Codex's thread n
 
 A session whose own turn ended stays under Working while its background agents work. A programmatic run such as `claude -p` or `codex exec` remains under Needs You only while its process runs; stopped runs move to Recent Sessions with their reason.
 
+Saved Claude background jobs without recent conversation activity do not count as live sessions. Their saved blocked state can outlast the process.
+
 ## Return to the right terminal
 
 Warden identifies the session's process from its bridge or open transcript. Terminal and iTerm select its tab. The [VS Code companion](connections.md#vs-code-companion) selects its integrated terminal and window. macOS asks once before Warden may control Terminal or iTerm.
+
+Codex conversations started in the ChatGPT desktop app open their exact chat in that app.
 
 Without a live host, Warden opens Terminal in the account and project folder with `claude --resume <session-id>` or `codex resume <session-id>`. Claude background sessions use `claude attach`. A click sends no new prompt. If Terminal cannot open, Warden offers to copy the resume command.
 

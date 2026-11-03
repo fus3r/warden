@@ -45,6 +45,15 @@ enum SessionNavigator {
     static func open(_ session: AgentSession, processes: [AgentProcess], accounts: [AgentAccount]) {
         if session.remote != nil { RemoteSessionNavigator.open(session); return }
         Task {
+            if let url = SessionNavigation.desktopURL(for: session),
+               let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.openai.codex") {
+                do {
+                    _ = try await NSWorkspace.shared.open([url], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+                } catch {
+                    showError("ChatGPT could not open this conversation. \(error.localizedDescription)")
+                }
+                return
+            }
             // Check the live owner at click time; a folder can outlive several unrelated conversations.
             let files = session.host?.pid == nil ? await Task.detached {
                 openTranscripts(processes.filter { $0.provider == session.provider })

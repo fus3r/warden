@@ -106,16 +106,11 @@ final class TelemetryScanner: @unchecked Sendable {
 
         let (processes, apps) = processSnapshot()
         for view in claudeAgents(accounts, now: now, soon: refreshUsage, running: processes.contains { $0.provider == .claude }) {
-            for entry in view.entries {
-                guard let id = entry.sessionID else { continue }
-                if let index = sessions.firstIndex(where: { $0.provider == .claude && $0.id == id }) {
-                    sessions[index] = ClaudeAgentView.merge(sessions[index], entry: entry, readAt: view.readAt)
-                } else if entry.isBackground, entry.isWaiting || entry.isBusy {
-                    // A background session can wait on you long after its log last changed.
-                    var base = AgentSession(id: id, provider: .claude, surface: "Background", cwd: entry.cwd,
-                                            updatedAt: view.readAt.addingTimeInterval(-3), title: entry.name)
-                    base.account = view.account
-                    sessions.append(ClaudeAgentView.merge(base, entry: entry, readAt: view.readAt))
+            let followed = sessions.filter { $0.provider == .claude && $0.account == view.account }
+            let merged = ClaudeAgentView.applying(view.entries, to: followed, readAt: view.readAt)
+            for session in merged {
+                if let index = sessions.firstIndex(where: { $0.provider == .claude && $0.account == view.account && $0.id == session.id }) {
+                    sessions[index] = session
                 }
             }
             // Claude Code names each live session's process, which finds its terminal tab without the bridge.

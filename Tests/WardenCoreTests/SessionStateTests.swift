@@ -3,6 +3,38 @@ import XCTest
 
 /// States from event sequences seen in this Mac's logs between Claude Code 2.1.261 and 2.1.283 and Codex 0.153 and 0.157.
 final class SessionStateTests: XCTestCase {
+    func testSavedBlockedBackgroundJobDoesNotReappearWithAFreshTimestamp() throws {
+        let entries = ClaudeAgentView.entries(Data(#"[{"id":"old-job","cwd":"/tmp/project","kind":"background","startedAt":1791844756989,"sessionId":"old-session","name":"Old design discussion","state":"blocked"}]"#.utf8))
+        let now = Date()
+        XCTAssertTrue(ClaudeAgentView.applying(entries, to: [], readAt: now).isEmpty,
+                      "A saved job is not a current conversation, even when the provider still calls it blocked.")
+
+        var closed = AgentSession(id: "old-session", provider: .claude, surface: "Terminal", cwd: "/tmp/project",
+                                  phase: .idle, updatedAt: now.addingTimeInterval(-3600))
+        closed.ended = true
+        let result = try XCTUnwrap(ClaudeAgentView.applying(entries, to: [closed], readAt: now).first)
+        XCTAssertEqual(result.phase, .idle)
+        XCTAssertTrue(result.ended)
+        XCTAssertEqual(result.updatedAt, closed.updatedAt)
+        XCTAssertNil(result.backgroundID, "A closed conversation must resume its transcript rather than attach to an expired job.")
+
+        closed.ended = false
+        let waiting = try XCTUnwrap(ClaudeAgentView.applying(entries, to: [closed], readAt: now).first)
+        XCTAssertEqual(waiting.phase, .needsAttention, "A recent, open background conversation still reports its wait.")
+        XCTAssertEqual(waiting.backgroundID, "old-job")
+        XCTAssertEqual(waiting.updatedAt, closed.updatedAt)
+    }
+
+    func testCachedProviderWaitCannotReplaceANewerPromptWithTheWrongAlert() throws {
+        let readAt = Date()
+        let entries = ClaudeAgentView.entries(Data(#"[{"pid":4242,"cwd":"/tmp/project","kind":"interactive","sessionId":"session","status":"waiting","waitingFor":"permission prompt"}]"#.utf8))
+        let working = AgentSession(id: "session", provider: .claude, surface: "Terminal", cwd: "/tmp/project",
+                                   phase: .working, updatedAt: readAt.addingTimeInterval(1))
+        let result = try XCTUnwrap(ClaudeAgentView.applying(entries, to: [working], readAt: readAt).first)
+        XCTAssertEqual(result.phase, .working)
+        XCTAssertNil(result.attention)
+    }
+
     private func claude(_ lines: [String], id: String) throws -> AgentSession {
         let data = Data(lines.joined(separator: "\n").appending("\n").utf8)
         return try XCTUnwrap(TelemetryParser.claude(head: data, tail: Data("\n".utf8) + data, filename: "\(id).jsonl", modifiedAt: Date()))
