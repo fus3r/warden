@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 beta (build 14)
 
 - Add Live Output, a window of read-only terminals for active local Claude Code and Codex agents, including Codex runs started by Claude Code. Each pane shows the agent's replies as its command-line interface formats them, with a status line for the turn's running time and latest command.
 - Show commands and tool output on request, in one pane or in all of them with ⌃O, and zoom one agent with ⌘1 to ⌘9.
