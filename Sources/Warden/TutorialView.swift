@@ -172,6 +172,7 @@ struct TutorialView: View {
                 .buttonStyle(.borderedProminent)
             if openedMenu { feedback("You can reopen it from the lantern at any time.") }
             lesson("Needs You comes first", "Questions and approvals sit above running work. Click a session to return to its terminal or editor; Warden keeps the account and project together.")
+            lesson("Follow live output", "Click a local agent under Working to see its output, or open Live Output to follow agents side by side.")
             lesson("Recent Sessions keeps the rest", "Finished and quiet sessions move out of the way. Background agents are grouped with the session that started them.")
         }
     }

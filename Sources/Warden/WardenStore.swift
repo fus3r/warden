@@ -140,6 +140,9 @@ final class WardenStore: ObservableObject {
     let remotes = RemoteConnections()
     #endif
     private var localScan: ScanResult?
+    var traceTranscripts: [TraceSource.ID: TraceSource] { localScan?.transcripts ?? [:] }
+    /// An explicit exit or dismissal applies to the observed activity only. A later turn is shown normally.
+    private var closedCodex: [TraceSource.ID: (through: Date, processEnded: Bool)] = [:]
     private var localConnections: [String: ClaudeConnection] = [:]
     private var timer: Timer?
     private var isScanning = false
@@ -715,6 +718,83 @@ final class WardenStore: ObservableObject {
         SessionNavigator.open(session, processes: processes, accounts: accounts)
     }
 
+    func dismissInterruptedCodex(_ source: TraceSource) -> Bool {
+        guard let current = sessions.first(where: { $0.remote == nil && TraceSource.ID($0) == source.id }),
+              current.provider == .codex, current.attention == .interrupted,
+              current.updatedAt == source.session.updatedAt else { return false }
+        closedCodex[source.id] = (current.updatedAt, false)
+        presentScan()
+        return true
+    }
+
+    /// True when a dedicated process exited and the viewer can remove its pane.
+    func stopCodex(_ source: TraceSource) async -> Bool {
+        let session = source.session
+        guard session.provider == .codex, session.remote == nil, !session.ended,
+              let account = accounts.first(where: { $0.provider == .codex && $0.name == session.account }) else { return false }
+
+        if let file = source.file, !session.isSubagent {
+            let pids = processes.filter { $0.provider == .codex }.map(\.id)
+            if let owner = await Task.detached(priority: .utility, operation: {
+                CodexSessionControl.owner(of: file, among: pids)
+            }).value {
+                guard confirmCodexStop("Force quit “\(source.name)”?", action: "Force Quit",
+                                       detail: "This ends its Codex process immediately. Work in progress may be lost.") else { return false }
+                let pids = processes.filter { $0.provider == .codex }.map(\.id)
+                guard traceTranscripts[source.id]?.file == file,
+                      await Task.detached(priority: .utility, operation: {
+                          CodexSessionControl.forceQuit(owner, file: file, among: pids)
+                      }).value else {
+                    showCodexStopResult("Could not force quit “\(source.name)”",
+                                        detail: "Warden could no longer verify the same dedicated process.")
+                    return false
+                }
+                let modified = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+                closedCodex[source.id] = (modified ?? session.updatedAt, true)
+                presentScan()
+                refresh()
+                return true
+            }
+        }
+
+        if let client = codexClients[account.id], let turn = await client.activeTurn(threadID: session.id) {
+            guard confirmCodexStop("Stop the Codex turn in “\(source.name)”?", action: "Stop Turn",
+                                   detail: "Codex will interrupt this turn. You can continue the conversation afterward.") else { return false }
+            guard await client.interrupt(threadID: session.id, turnID: turn) else {
+                showCodexStopResult("Codex did not confirm the stop", detail: "Check the session in Codex before trying again.")
+                return false
+            }
+            refresh()
+            return false
+        }
+
+        showCodexStopResult("No verified live target for “\(source.name)”",
+                            detail: session.attention == .interrupted
+                                ? "The last turn was interrupted. You can dismiss its entry from the pane menu."
+                                : "Warden could not find a dedicated process or a reachable Codex turn. Open the conversation to check its state.")
+        return false
+    }
+
+    private func confirmCodexStop(_ title: String, action: String, detail: String) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = detail
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: action).keyEquivalent = ""
+        alert.addButton(withTitle: "Cancel").keyEquivalent = "\r"
+        NSApp.activate()
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private func showCodexStopResult(_ title: String, detail: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = detail
+        alert.addButton(withTitle: "OK")
+        NSApp.activate()
+        alert.runModal()
+    }
+
     /// The session's prompt cache, when a reply after it expires would cost a point or more of the 5-hour limit, or,
     /// before the limit has a rate, when its context is large.
     func cacheNote(for session: AgentSession) -> CacheNote? {
@@ -845,7 +925,22 @@ final class WardenStore: ObservableObject {
         let connections = localConnections
         let waits = codexWaits.values.reduce(into: [String: CodexApprovals.Wait]()) { $0.merge($1) { first, _ in first } }
         let followed = result.sessions.filter { Accounts.follows($0.provider, account: $0.account, in: accounts) }
-        sessions = CodexApprovals.applying(waits, to: followed) + remotes.sessions
+        let local = CodexApprovals.applying(waits, to: followed).map { observed -> AgentSession in
+            let id = TraceSource.ID(observed)
+            guard let closed = closedCodex[id] else { return observed }
+            if observed.updatedAt > closed.through {
+                closedCodex[id] = nil
+                return observed
+            }
+            guard closed.processEnded || observed.attention == .interrupted else { return observed }
+            var session = observed
+            session.phase = .idle
+            session.attention = nil
+            session.detail = nil
+            session.ended = session.ended || closed.processEnded
+            return session
+        }
+        sessions = local + remotes.sessions
         let localWindows = result.windows.filter { Accounts.follows($0.provider, account: $0.account, in: accounts) }
         windows = localWindows + remotes.windows
         releaseUnfollowedApprovals()

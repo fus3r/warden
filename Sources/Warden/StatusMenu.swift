@@ -17,6 +17,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private let openSettings: () -> Void
     private let openHistory: () -> Void
     private let openPlanner: () -> Void
+    private let openTraces: (AgentSession?) -> Void
     private let openTutorial: () -> Void
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
@@ -25,11 +26,13 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private let subtitleFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
 
     init(store: WardenStore, openSettings: @escaping () -> Void,
-         openHistory: @escaping () -> Void, openPlanner: @escaping () -> Void, openTutorial: @escaping () -> Void) {
+         openHistory: @escaping () -> Void, openPlanner: @escaping () -> Void,
+         openTraces: @escaping (AgentSession?) -> Void, openTutorial: @escaping () -> Void) {
         self.store = store
         self.openSettings = openSettings
         self.openHistory = openHistory
         self.openPlanner = openPlanner
+        self.openTraces = openTraces
         self.openTutorial = openTutorial
         super.init()
         menu.delegate = self
@@ -123,6 +126,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             menu.addItem(.sectionHeader(title: title))
             for session in sessions { addSession(session, section: section, to: menu, now: now) }
         }
+        if working.isEmpty { menu.addItem(.separator()) }
+        let traces = NSMenuItem(title: "Live Output…", action: #selector(showTraces), keyEquivalent: "")
+        traces.target = self
+        traces.image = symbol("terminal")
+        menu.addItem(traces)
 
         let defaults = UserDefaults.standard
         if !store.windows.isEmpty, defaults.bool(forKey: "menuShowsUsage") {
@@ -272,15 +280,21 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     private func addSession(_ session: AgentSession, section: Section, to menu: NSMenu, now: Date) {
-        let item = NSMenuItem(title: name(of: session), action: #selector(openSession(_:)), keyEquivalent: "")
+        let showsTrace = section == .working && session.remote == nil
+        let action = showsTrace ? #selector(runViewAction(_:)) : #selector(openSession(_:))
+        let item = NSMenuItem(title: name(of: session), action: action, keyEquivalent: "")
         item.target = self
-        item.representedObject = session.id
+        if showsTrace {
+            item.representedObject = ViewAction { [weak self] in self?.openTraces(session) }
+        } else {
+            item.representedObject = session.id
+        }
         item.keyEquivalentModifierMask = []
         item.image = icon(for: session)
         setSubtitle(item, MenuFormat.fit(subtitle(for: session), width: 222, font: subtitleFont))
         let start = section == .working ? (session.turnStartedAt ?? session.updatedAt) : session.updatedAt
         item.badge = NSMenuItemBadge(string: MenuFormat.age(since: start, now: now))
-        item.toolTip = tooltip(for: session)
+        item.toolTip = tooltip(for: session, showsTrace: showsTrace)
 
         let muted = store.isMuted(session)
         let alternate = NSMenuItem(title: name(of: session, prefix: muted ? "Unmute " : "Mute "),
@@ -666,7 +680,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         return text + "."
     }
 
-    private func tooltip(for session: AgentSession) -> String {
+    private func tooltip(for session: AgentSession, showsTrace: Bool) -> String {
         var lines: [String] = []
         let agent = session.provider == .claude ? "Claude Code" : "Codex"
         if let title = session.title { lines.append(title) }
@@ -721,7 +735,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             lines.append(health)
         }
         lines.append((session.cwd as NSString).abbreviatingWithTildeInPath)
-        lines.append("Click to show. Option-click to mute.")
+        lines.append(showsTrace ? "Click to show live output. Option-click to mute." : "Click to open. Option-click to mute.")
         return lines.joined(separator: "\n")
     }
 
@@ -823,6 +837,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     @objc private func showSettings() { openSettings() }
     @objc private func showHistory() { openHistory() }
     @objc private func showPlanner() { openPlanner() }
+    @objc private func showTraces() { openTraces(nil) }
 
     @objc private func quit() { NSApp.terminate(nil) }
 }

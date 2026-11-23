@@ -1,15 +1,17 @@
 import AppKit
 import SwiftUI
+import WardenCore
 
 @main
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let store = WardenStore()
     private var statusMenu: StatusMenuController?
     private var settingsWindow: NSWindow?
     private var tutorialWindow: NSWindow?
     private var historyWindow: NSWindow?
     private var plannerWindow: NSWindow?
+    private var traces: (window: NSWindow, navigation: TraceNavigation)?
 
     static func main() {
         // Helper processes may exit before reading their input; a write must fail instead of ending Warden.
@@ -38,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusMenu = StatusMenuController(store: store, openSettings: { [weak self] in self?.showSettings() },
                                           openHistory: { [weak self] in self?.showHistory() },
                                           openPlanner: { [weak self] in self?.showPlanner() },
+                                          openTraces: { [weak self] in self?.showTraces(session: $0) },
                                           openTutorial: { [weak self] in self?.showTutorial() })
         store.openTutorial = { [weak self] in self?.showTutorial() }
         store.openMenu = { [weak self] in self?.statusMenu?.open() }
@@ -47,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch ProcessInfo.processInfo.environment["WARDEN_SHOW"] {
         case "history": showHistory()
         case "planner": showPlanner()
+        case "traces": showTraces()
         case "settings": showSettings()
         case "tutorial": showTutorial()
         default: break
@@ -175,6 +179,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         store.refresh(usage: true)
         showWindow(plannerWindow)
+    }
+
+    private func showTraces(session: AgentSession? = nil) {
+        if traces == nil {
+            let navigation = TraceNavigation()
+            let host = NSHostingController(rootView: LiveTracesView(store: store, navigation: navigation))
+            // The view supplies the toolbar and a subtitle that counts the agents by state.
+            host.sceneBridgingOptions = [.toolbars, .title]
+            let window = NSWindow(contentViewController: host)
+            window.title = "Warden Live Output"
+            window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
+            window.toolbarStyle = .unified
+            let screen = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1_300, height: 860)
+            window.setContentSize(NSSize(width: min(1_280, screen.width - 40), height: min(800, screen.height - 60)))
+            window.contentMinSize = NSSize(width: 700, height: 420)
+            window.isReleasedWhenClosed = false
+            window.delegate = self
+            window.center()
+            traces = (window, navigation)
+        }
+        traces?.navigation.show(session)
+        store.refresh()
+        showWindow(traces?.window)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === traces?.window else { return }
+        window.contentViewController = nil
+        traces = nil
     }
 
     private func showWindow(_ window: NSWindow?) {

@@ -17,7 +17,9 @@ Limit percentages and reset times come from provider telemetry. Stale readings a
 
 ## Bounded log reads
 
-Session scans run every eight seconds. They consider at most 28 recent Claude logs and 56 Codex logs, reading the first 64 KB and a bounded tail: 512 KB for Claude, 1 MB for Codex, expanded to at most 8 MB for a recent unresolved Codex session. Unchanged logs use an in-memory cache. Claude subagent transcripts are read only to determine whether they still work.
+Session scans run every eight seconds. They consider at most 28 recent Claude logs and 56 Codex logs, reading the first 64 KB and a bounded tail: 512 KB for Claude, 1 MB for Codex, expanded to at most 8 MB for a recent unresolved Codex session. Unchanged logs use an in-memory cache.
+
+**Live Output** reads messages and tool activity from the selected local logs, including available subagent logs. It reads up to 4 MB when it opens a log and up to 1 MB at a time as the log changes. Recent entries stay in memory. Output stays in the Mac window. Warden creates no separate transcript file and shares no output with remote hosts or paired devices.
 
 A session counts as running while its agent process lives. A quiet transcript during a long reasoning step does not itself mark the session inactive.
 

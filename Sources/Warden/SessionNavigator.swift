@@ -56,7 +56,7 @@ enum SessionNavigator {
             }
             // Check the live owner at click time; a folder can outlive several unrelated conversations.
             let files = session.host?.pid == nil ? await Task.detached {
-                openTranscripts(processes.filter { $0.provider == session.provider })
+                openTranscripts(pids: processes.filter { $0.provider == session.provider }.map(\.id))
             }.value : ""
             var process = SessionNavigation.process(for: session, in: processes, openFiles: files)
             let editorProcesses = processes.filter {
@@ -106,12 +106,12 @@ enum SessionNavigator {
     }
 
     /// Find a transcript owner only when clicked, never on each telemetry refresh. No file contents are read.
-    nonisolated private static func openTranscripts(_ processes: [AgentProcess]) -> String {
-        guard !processes.isEmpty else { return "" }
+    nonisolated static func openTranscripts(pids: [Int], fields: String = "pn", requireComplete: Bool = false) -> String {
+        guard !pids.isEmpty else { return "" }
         let task = Process()
         let pipe = Pipe()
         task.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        task.arguments = ["-n", "-P", "-a", "-p", processes.map { String($0.id) }.joined(separator: ","), "-Fpn"]
+        task.arguments = ["-n", "-P", "-a", "-p", pids.map(String.init).joined(separator: ","), "-F" + fields]
         task.standardOutput = pipe
         task.standardError = FileHandle.nullDevice
         guard (try? task.run()) != nil else { return "" }
@@ -120,6 +120,7 @@ enum SessionNavigator {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         task.waitUntilExit()
         timeout.cancel()
+        if requireComplete, task.terminationReason != .exit || task.terminationStatus != 0 { return "" }
         return String(data: data, encoding: .utf8) ?? ""
     }
 

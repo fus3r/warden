@@ -43,6 +43,7 @@ public enum TelemetryParser {
                     session.isSubagent = true
                     let spawn = (source["subagent"] as? [String: Any])?["thread_spawn"] as? [String: Any]
                     session.parentID = spawn?["parent_thread_id"] as? String
+                    session.title = spawn?["agent_nickname"] as? String
                 }
                 if ["subagent", "guardian_review"].contains(payload["thread_source"] as? String) { session.isSubagent = true }
                 let origin = (payload["originator"] as? String ?? "").lowercased()

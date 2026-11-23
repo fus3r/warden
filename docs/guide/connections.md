@@ -41,7 +41,7 @@ The optional companion selects the exact integrated terminal and window, includi
 1. Download **`warden-terminal.vsix`** from [Warden Releases](https://github.com/fus3r/warden/releases).
 2. In VS Code, choose **Extensions → … → Install from VSIX…**.
 3. If VS Code requests a reload, wait until your sessions can be interrupted.
-4. Click a live session in Warden and check that its terminal comes forward.
+4. Click a local session under **Working**, then click **Open Conversation** and check that its terminal comes forward.
 
 Without the companion, Warden activates the live host app. From a source checkout, `./Scripts/install-editor-extension.sh` installs it.
 

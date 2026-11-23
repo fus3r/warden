@@ -10,6 +10,7 @@ struct ScanResult {
     var processes: [AgentProcess]
     var nativeApps: [String]
     var scannedAt: Date
+    var transcripts: [TraceSource.ID: TraceSource] = [:]
 }
 
 // WardenStore serializes calls with isScanning. Only its background queue touches this state.
@@ -37,7 +38,13 @@ final class TelemetryScanner: @unchecked Sendable {
         var sessions: [AgentSession] = []
         // Claude transcripts with no conversation yet, such as the session a /clear opens.
         var emptyTranscripts = Set<String>()
-        var busySubagents: [String: Int] = [:]
+        var busySubagents: [TraceSource.ID: Int] = [:]
+        var transcripts: [TraceSource.ID: TraceSource] = [:]
+        func remember(_ session: AgentSession, file: URL) {
+            let source = TraceSource(session: session, file: file)
+            if let old = transcripts[source.id], old.session.updatedAt >= session.updatedAt { return }
+            transcripts[source.id] = source
+        }
         // Codex keeps spawned threads and reviews in logs of their own, so more of its logs are read, and the
         // threads then count toward the session that started them. The limit counts logs of all accounts together.
         for (provider, limit) in [(AgentProvider.codex, 56), (AgentProvider.claude, 28)] {
@@ -45,20 +52,29 @@ final class TelemetryScanner: @unchecked Sendable {
             for account in accounts where account.provider == provider {
                 let (found, subagents) = recentFiles(at: account.sessions, since: now.addingTimeInterval(-6 * 3600), now: now)
                 files += found.map { ($0.0, $0.1, account.name) }
-                for (session, transcripts) in subagents {
+                for (parent, children) in subagents {
                     // A subagent works until its own turn ends with its report.
-                    let working = transcripts.filter { parse($0, provider: .claude, account: account.name, now: now)?.phase == .working }
-                    if !working.isEmpty { busySubagents[session] = working.count }
+                    for child in children {
+                        guard let parsed = parse(child, provider: .claude, account: account.name, now: now,
+                                                 claudeParent: parent) else { continue }
+                        remember(parsed, file: child)
+                        if parsed.phase == .working,
+                           let parentID = TraceSource(session: parsed, file: child).parentID {
+                            busySubagents[parentID, default: 0] += 1
+                        }
+                    }
                 }
             }
             for (file, _, account) in files.sorted(by: { $0.modified > $1.modified }).prefix(limit) {
-                if let parsed = parse(file, provider: provider, account: account, now: now) { sessions.append(parsed) }
-                else if provider == .claude { emptyTranscripts.insert(file.deletingPathExtension().lastPathComponent) }
+                if let parsed = parse(file, provider: provider, account: account, now: now) {
+                    sessions.append(parsed)
+                    remember(parsed, file: file)
+                } else if provider == .claude { emptyTranscripts.insert(file.deletingPathExtension().lastPathComponent) }
             }
         }
 
         for thread in sessions where thread.isSubagent && thread.phase == .working && thread.updatedAt > now.addingTimeInterval(-1800) {
-            if let parent = thread.parentID { busySubagents[parent, default: 0] += 1 }
+            if let parent = TraceSource(session: thread, file: nil).parentID { busySubagents[parent, default: 0] += 1 }
         }
         sessions.removeAll { $0.isSubagent }
 
@@ -68,6 +84,9 @@ final class TelemetryScanner: @unchecked Sendable {
         }
         for index in sessions.indices where sessions[index].provider == .codex && sessions[index].title == nil {
             sessions[index].title = titles[sessions[index].id]
+        }
+        for key in transcripts.keys where key.provider == .codex && transcripts[key]?.session.title == nil {
+            transcripts[key]?.session.title = titles[key.sessionID]
         }
 
         let bridge = readBridge(now: now)
@@ -132,7 +151,7 @@ final class TelemetryScanner: @unchecked Sendable {
             var session = sessions[index]
             // Subagents that still write keep a Claude session working after its own turn ends, as background
             // agents do. The session then finishes when Claude answers their results.
-            session.activeSubagents = session.ended ? 0 : busySubagents[session.id] ?? 0
+            session.activeSubagents = session.ended ? 0 : busySubagents[TraceSource.ID(session)] ?? 0
             if session.activeSubagents > 0, session.phase != .needsAttention {
                 session.phase = .working
             }
@@ -180,11 +199,12 @@ final class TelemetryScanner: @unchecked Sendable {
         }
         let current = Set(accounts.map(\.id))
         return ScanResult(sessions: sessions, windows: windows, plans: plans.filter { current.contains($0.key) }.map(\.value),
-                          processes: processes, nativeApps: apps, scannedAt: now)
+                          processes: processes, nativeApps: apps, scannedAt: now, transcripts: transcripts)
     }
 
     /// A session from the start and recent end of its log, cached until the file changes.
-    private func parse(_ file: URL, provider: AgentProvider, account: String?, now: Date) -> AgentSession? {
+    private func parse(_ file: URL, provider: AgentProvider, account: String?, now: Date,
+                       claudeParent: String? = nil) -> AgentSession? {
         guard let attrs = try? manager.attributesOfItem(atPath: file.path),
               let modified = attrs[.modificationDate] as? Date,
               let size = attrs[.size] as? Int else { return nil }
@@ -214,6 +234,23 @@ final class TelemetryScanner: @unchecked Sendable {
                               : session.turnPromptID != nil && session.turnPromptID == earlier.turnPromptID {
             session.turnStartedAt = start
             parsed = session
+        }
+        if let claudeParent, var child = parsed {
+            // Claude reuses the parent's sessionId inside every child transcript.
+            child.id = file.deletingPathExtension().lastPathComponent
+            child.parentID = claudeParent
+            child.isSubagent = true
+            let metadata = file.deletingPathExtension().appendingPathExtension("meta.json")
+            if let handle = try? FileHandle(forReadingFrom: metadata) {
+                defer { try? handle.close() }
+                if let data = try? handle.read(upToCount: 8192),
+                   let info = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                   let description = info["description"] as? String, !description.isEmpty {
+                    child.title = String(description.prefix(120))
+                }
+            }
+            child.title = child.title ?? "Subagent \(child.id.suffix(6))"
+            parsed = child
         }
         if let parsed { cache[file.path] = Cached(modified: modified, size: size, session: parsed) }
         return parsed

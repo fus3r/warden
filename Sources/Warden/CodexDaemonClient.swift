@@ -75,6 +75,38 @@ final class CodexDaemonClient: @unchecked Sendable {
         }
     }
 
+    /// Reads just the latest turn's identity, after the same server confirms it hosts the live thread.
+    func activeTurn(threadID: String) async -> String? {
+        await withCheckedContinuation { reply in
+            queue.async {
+                guard self.fd >= 0, self.upgrade == nil else { reply.resume(returning: nil); return }
+                self.call("thread/read", ["threadId": threadID, "includeTurns": false], timeout: 3) { result in
+                    guard let thread = result?["thread"] as? [String: Any], thread["id"] as? String == threadID,
+                          let status = thread["status"] as? [String: Any], status["type"] as? String == "active" else {
+                        reply.resume(returning: nil)
+                        return
+                    }
+                    self.call("thread/turns/list", ["threadId": threadID, "limit": 1, "sortDirection": "desc",
+                                                   "itemsView": "notLoaded"], timeout: 3) { result in
+                        let turn = (result?["data"] as? [[String: Any]])?.first
+                        reply.resume(returning: turn?["status"] as? String == "inProgress" ? turn?["id"] as? String : nil)
+                    }
+                }
+            }
+        }
+    }
+
+    func interrupt(threadID: String, turnID: String) async -> Bool {
+        await withCheckedContinuation { reply in
+            queue.async {
+                guard self.fd >= 0, self.upgrade == nil else { reply.resume(returning: false); return }
+                self.call("turn/interrupt", ["threadId": threadID, "turnId": turnID], timeout: 5) {
+                    reply.resume(returning: $0 != nil)
+                }
+            }
+        }
+    }
+
     // MARK: Connection
 
     private func connect() {
@@ -121,6 +153,7 @@ final class CodexDaemonClient: @unchecked Sendable {
         source = nil
         fd = -1
         upgrade = nil
+        let unanswered = replies
         replies = [:]
         threads = [:]
         edits = [:]
@@ -130,6 +163,7 @@ final class CodexDaemonClient: @unchecked Sendable {
         if let reason { log?("disconnected: \(reason)") }
         DispatchQueue.main.async { gone.forEach { self.onGone?($0) } }
         publishWaits()
+        unanswered.values.forEach { $0(nil) }
     }
 
     /// Reads everything the daemon sent, so it never waits on Warden: the daemon drops a client that falls behind.
@@ -333,11 +367,17 @@ final class CodexDaemonClient: @unchecked Sendable {
         "codex-\(connection)-\(thread)-\(rpcID)"
     }
 
-    private func call(_ method: String, _ params: [String: Any], then reply: (([String: Any]?) -> Void)?) {
+    private func call(_ method: String, _ params: [String: Any], timeout: TimeInterval? = nil,
+                      then reply: (([String: Any]?) -> Void)?) {
         let id = nextID
         nextID += 1
         if let reply { replies[id] = reply }
         send(["id": id, "method": method, "params": params])
+        if let timeout, reply != nil {
+            queue.asyncAfter(deadline: .now() + timeout) { [weak self] in
+                self?.replies.removeValue(forKey: id)?(nil)
+            }
+        }
     }
 
     private func send(_ message: [String: Any]) {
